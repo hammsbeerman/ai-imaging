@@ -1,0 +1,143 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Duplicate Group · AI Image Catalog{% endblock %}
+{% block page_title %}Duplicate Group{% endblock %}
+{% block page_meta %}Exact duplicate file set{% endblock %}
+
+{% block content %}
+
+<div class="page-card p-3 mb-4">
+  <div class="d-flex flex-wrap justify-content-between gap-3">
+    <div>
+      <div class="text-muted small mb-1">Group id</div>
+      <div class="mono small">{{ group_id }}</div>
+    </div>
+    <div>
+      <div class="text-muted small mb-1">Files</div>
+      <div class="fw-semibold">{{ total_count }}</div>
+    </div>
+  </div>
+
+  {% if customer_names %}
+    <div class="mt-3">
+      <div class="text-muted small mb-1">Customers</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for name in customer_names %}
+          <a href="/ui/customers/{{ name|urlencode }}/" class="badge text-bg-light text-decoration-none">{{ name }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if job_numbers %}
+    <div class="mt-3">
+      <div class="text-muted small mb-1">Jobs</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for job in job_numbers %}
+          <a href="/ui/jobs/{{ job|urlencode }}/" class="badge text-bg-light text-decoration-none">{{ job }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if folder_paths %}
+    <div class="mt-3">
+      <div class="text-muted small mb-1">Folders</div>
+      <div class="small">
+        {% for path in folder_paths %}
+          <div>{{ path }}</div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<div class="row g-3">
+  {% for img in page_obj %}
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="page-card p-3 h-100">
+        <div class="mb-3 text-center">
+          <a href="/ui/item/{{ img.id }}/">
+            <img
+              src="/api/thumb/{{ img.id }}"
+              alt="{{ img.filename }}"
+              class="img-fluid rounded"
+              style="max-height:220px; object-fit:contain; background:#fff; border:1px solid #ddd;"
+            >
+          </a>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {% if img.is_primary_duplicate %}
+            <span class="badge text-bg-success">primary</span>
+          {% endif %}
+          {% if img.preview_status %}
+            <span class="badge text-bg-secondary">{{ img.preview_status }}</span>
+          {% endif %}
+          {% if img.metadata_status %}
+            <span class="badge text-bg-secondary">meta: {{ img.metadata_status }}</span>
+          {% endif %}
+        </div>
+
+        <div class="fw-semibold text-break">
+          <a href="/ui/item/{{ img.id }}/" class="text-decoration-none">{{ img.filename }}</a>
+        </div>
+
+        <div class="small text-muted text-break mt-1">{{ img.path }}</div>
+
+        {% if img.customer_name %}
+          <div class="small mt-2">
+            Customer:
+            <a href="/ui/customers/{{ img.customer_name|urlencode }}/" class="text-decoration-none">
+              {{ img.customer_name }}
+            </a>
+          </div>
+        {% endif %}
+
+        {% if img.probable_job_number %}
+          <div class="small">
+            Job:
+            <a href="/ui/jobs/{{ img.probable_job_number|urlencode }}/" class="text-decoration-none">
+              {{ img.probable_job_number }}
+            </a>
+          </div>
+        {% endif %}
+
+        {% if img.folder_id %}
+          <div class="small">
+            Folder:
+            <a href="/ui/browse/folder/{{ img.folder_id }}/" class="text-decoration-none">
+              {{ img.relative_dir|default:"Browse folder" }}
+            </a>
+          </div>
+        {% elif img.relative_dir %}
+          <div class="small">Folder: {{ img.relative_dir }}</div>
+        {% endif %}
+
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <a class="btn btn-outline-primary btn-sm" href="/ui/item/{{ img.id }}/">Open</a>
+          <a class="btn btn-outline-warning btn-sm" href="/ui/search/?mode=duplicates&id={{ img.id }}">Near dupes</a>
+          <a class="btn btn-outline-secondary btn-sm" href="/ui/search/?mode=cluster&id={{ img.id }}">Cluster</a>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <div class="small text-muted">
+      Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="d-flex gap-2">
+      {% if page_obj.has_previous %}
+        <a class="btn btn-outline-secondary btn-sm" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a class="btn btn-outline-secondary btn-sm" href="?page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

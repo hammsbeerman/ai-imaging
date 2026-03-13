@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Collections</title>
+</head>
+
+<body>
+
+<h1>Collections</h1>
+
+<p><a href="/ui/search/">Search</a></p>
+
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:20px;">
+
+{% for c in clusters %}
+
+<a href="/ui/search/?mode=cluster&id={{ c.source_id }}&limit=100" style="text-decoration:none; color:black;">
+
+<div style="border:1px solid #ccc; padding:10px;">
+
+<img src="/api/thumb/{{ c.source_id }}" style="width:100%; height:160px; object-fit:cover;">
+
+<div style="margin-top:6px;">
+{{ c.filename }}
+</div>
+
+<div style="font-size:12px;">
+{{ c.size }} related images
+</div>
+
+</div>
+
+</a>
+
+{% endfor %}
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,165 @@
+{% if source_img %}
+<div class="page-card p-3 mb-3">
+
+  <div class="row g-3">
+
+    <div class="col-auto">
+      <img
+        src="/api/thumb/{{ source_img.id }}"
+        class="img-fluid rounded"
+        style="max-width:220px; max-height:220px; object-fit:contain; background:#fff; border:1px solid #ddd;"
+      >
+    </div>
+
+    <div class="col">
+
+      <h2 class="h5 mb-1">Source image</h2>
+
+      <div>
+        <a href="/ui/item/{{ source_img.id }}/">
+          {{ source_img.filename }}
+        </a>
+      </div>
+
+      <div class="text-muted small mono mt-1">
+        {{ source_img.path }}
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+{% endif %}
+
+
+
+{% if results %}
+
+<div class="row g-3">
+
+{% for img in results %}
+
+<div class="col-6 col-md-4 col-xl-3">
+
+<div class="page-card p-2 h-100">
+
+<div class="text-center mb-2">
+
+<a href="/ui/item/{{ img.id }}/">
+
+<img
+src="/api/thumb/{{ img.id }}"
+class="img-fluid rounded"
+style="max-height:220px; object-fit:contain; background:#fff; border:1px solid #ddd;"
+>
+
+</a>
+
+</div>
+
+
+<div class="small fw-semibold text-truncate" title="{{ img.filename }}">
+
+<a href="/ui/item/{{ img.id }}/">
+{{ img.filename|default:"(no filename)" }}
+</a>
+
+</div>
+
+{% if img.match_reasons %}
+<div class="d-flex flex-wrap gap-1 mb-1">
+  {% for r in img.match_reasons %}
+    <span class="badge text-bg-secondary">{{ r }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+
+<div class="text-muted small mono mt-1 text-break" style="min-height:48px;">
+{{ img.path }}
+</div>
+
+
+<div class="d-flex flex-wrap gap-1 mt-2">
+
+{% if img.score %}
+<span class="badge text-bg-light">
+score {{ img.score|floatformat:4 }}
+</span>
+{% endif %}
+
+{% if img.file_ext or img.ext %}
+<span class="badge text-bg-secondary">
+{{ img.file_ext|default:img.ext }}
+</span>
+{% endif %}
+
+{% if img.customer_name %}
+<span class="badge text-bg-light">
+{{ img.customer_name }}
+</span>
+{% endif %}
+
+{% if img.job_type %}
+<span class="badge text-bg-light">
+{{ img.job_type }}
+</span>
+{% endif %}
+
+{% if img.probable_job_number %}
+<span class="badge text-bg-light">
+job {{ img.probable_job_number }}
+</span>
+{% endif %}
+{% if img.match_labels %}
+<div class="mt-1 small text-muted">
+  {% for label in img.match_labels %}
+    <span class="badge text-bg-light me-1">{{ label }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+</div>
+
+
+{% if img.folder_tokens %}
+<div class="small text-muted mt-2 text-break">
+{{ img.folder_tokens|truncatechars:100 }}
+</div>
+{% endif %}
+
+
+<div class="d-flex gap-2 mt-3 flex-wrap">
+
+<a class="btn btn-sm btn-outline-primary"
+href="/ui/item/{{ img.id }}/">
+Open
+</a>
+
+<a class="btn btn-sm btn-outline-secondary"
+href="/ui/similar/{{ img.id }}/">
+Similar
+</a>
+
+<a class="btn btn-sm btn-outline-secondary"
+href="/ui/search/?mode=duplicates&id={{ img.id }}">
+Duplicates
+</a>
+
+</div>
+
+</div>
+</div>
+
+{% endfor %}
+
+</div>
+
+{% else %}
+
+<div class="page-card p-4 text-center text-muted">
+No results found.
+</div>
+
+{% endif %}

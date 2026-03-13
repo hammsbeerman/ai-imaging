@@ -1,0 +1,374 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}{{ img.filename }} · AI Image Catalog{% endblock %}
+{% block page_title %}Item{% endblock %}
+{% block page_meta %}File details and related assets{% endblock %}
+
+{% block content %}
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-7">
+    <div class="page-card p-3 text-center">
+      <img
+        src="/api/thumb/{{ img.id }}"
+        alt="{{ img.filename }}"
+        class="img-fluid rounded"
+        style="max-height:650px; object-fit:contain; background:#fff; border:1px solid #ddd;"
+      >
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="page-card p-3 mb-3">
+      <h2 class="h5 mb-3">File info</h2>
+
+      <table class="table table-sm align-middle mb-0">
+        <tr>
+          <th class="text-muted">Filename</th>
+          <td>{{ img.filename }}</td>
+        </tr>
+
+        <tr>
+          <th class="text-muted">Extension</th>
+          <td>{{ img.file_ext|default:img.ext }}</td>
+        </tr>
+
+        <tr>
+          <th class="text-muted">Path</th>
+          <td class="mono small">{{ img.path }}</td>
+        </tr>
+
+        {% if img.relative_dir %}
+        <tr>
+          <th class="text-muted">Folder</th>
+          <td class="small text-break">
+            {{ img.relative_dir }}
+            {% if browse_folder_url %}
+              <div class="mt-1">
+                <a href="{{ browse_folder_url }}" class="text-decoration-none">Browse this folder</a>
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+
+        {% if img.customer_name %}
+        <tr>
+          <th class="text-muted">Customer</th>
+          <td>
+            {% if customer_url %}
+              <a href="{{ customer_url }}" class="text-decoration-none">{{ img.customer_name }}</a>
+            {% else %}
+              {{ img.customer_name }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+
+        {% if img.probable_job_number %}
+        <tr>
+          <th class="text-muted">Job</th>
+          <td>
+            {% if job_url %}
+              <a href="{{ job_url }}" class="text-decoration-none">{{ img.probable_job_number }}</a>
+            {% else %}
+              {{ img.probable_job_number }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+
+        <tr>
+          <th class="text-muted">Indexed</th>
+          <td>
+            {% if img.indexed %}
+              <span class="badge text-bg-success">yes</span>
+            {% else %}
+              <span class="badge text-bg-warning">no</span>
+            {% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <th class="text-muted">Preview status</th>
+          <td>
+            {% if img.preview_status %}
+              <span class="badge text-bg-secondary">{{ img.preview_status }}</span>
+            {% elif img.preview_path or img.thumb_path %}
+              <span class="badge text-bg-success">ok</span>
+            {% else %}
+              <span class="badge text-bg-warning">missing</span>
+            {% endif %}
+          </td>
+        </tr>
+
+        {% if img.width or img.height %}
+        <tr>
+          <th class="text-muted">Dimensions</th>
+          <td>{{ img.width|default:img.image_width }} × {{ img.height|default:img.image_height }}</td>
+        </tr>
+        {% endif %}
+
+        {% if img.duplicate_group %}
+        <tr>
+          <th class="text-muted">Duplicate group</th>
+          <td class="small text-break">
+            <div>{{ img.duplicate_group }}</div>
+            <div class="mt-1">
+              <a href="/ui/duplicates/{{ img.duplicate_group }}/" class="text-decoration-none">
+                View exact duplicate group
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+
+        {% if img.visual_cluster_id %}
+        <tr>
+          <th class="text-muted">Visual cluster</th>
+          <td class="small text-break">
+            <div>{{ img.visual_cluster_id }}</div>
+            <div class="mt-1">
+              <a href="/ui/clusters/{{ img.visual_cluster_id }}/" class="text-decoration-none">
+                View visual cluster
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+      </table>
+
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <a class="btn btn-outline-primary btn-sm" href="/ui/similar/{{ img.id }}/">Similar</a>
+        <a class="btn btn-outline-warning btn-sm" href="/ui/search/?mode=duplicates&id={{ img.id }}">Duplicates</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/ui/search/?mode=cluster&id={{ img.id }}">Visual Cluster</a>
+
+        <form method="post" action="/ui/retry-preview/{{ img.id }}/" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            Retry preview
+          </button>
+        </form>
+
+        <form method="post" action="/ui/retry-index/{{ img.id }}/" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-secondary btn-sm">
+            Retry index
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="page-card p-3 mb-3">
+      <h2 class="h5 mb-3">Open / navigate</h2>
+
+      <div class="d-flex flex-column gap-2 small">
+        {% if browse_folder_url %}
+          <div><a href="{{ browse_folder_url }}" class="text-decoration-none">Browse containing folder</a></div>
+        {% endif %}
+
+        {% if customer_url %}
+          <div><a href="{{ customer_url }}" class="text-decoration-none">View customer</a></div>
+        {% endif %}
+
+        {% if job_url %}
+          <div><a href="{{ job_url }}" class="text-decoration-none">View job</a></div>
+        {% endif %}
+
+        {% if open_folder_unc %}
+          <div class="text-break"><strong>Windows:</strong> {{ open_folder_unc }}</div>
+        {% endif %}
+
+        {% if open_folder_smb %}
+          <div class="text-break"><strong>Mac:</strong> {{ open_folder_smb }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="page-card p-3">
+      <h2 class="h5 mb-3">Index status</h2>
+
+      <table class="table table-sm mb-0">
+        <tr>
+          <th class="text-muted">Preview</th>
+          <td>
+            {% if img.preview_path or img.thumb_path %}
+              <span class="badge text-bg-success">ok</span>
+            {% else %}
+              <span class="badge text-bg-warning">missing</span>
+            {% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <th class="text-muted">Extracted text</th>
+          <td>
+            {% if img.extracted_text %}
+              <span class="badge text-bg-success">yes</span>
+            {% else %}
+              <span class="badge text-bg-secondary">none</span>
+            {% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <th class="text-muted">Metadata</th>
+          <td>
+            {% if img.metadata_status %}
+              <span class="badge text-bg-secondary">{{ img.metadata_status }}</span>
+            {% else %}
+              <span class="badge text-bg-secondary">unknown</span>
+            {% endif %}
+          </td>
+        </tr>
+
+        <tr>
+          <th class="text-muted">Embedding</th>
+          <td>
+            {% if img.embedding_status %}
+              <span class="badge text-bg-secondary">{{ img.embedding_status }}</span>
+            {% else %}
+              <span class="badge text-bg-secondary">unknown</span>
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="page-card p-3 mb-3">
+  <h2 class="h5 mb-3">
+    Sibling job files
+    <span class="text-muted small">({{ sibling_job_files|length }})</span>
+  </h2>
+
+  {% if sibling_job_files %}
+    <div class="row g-3">
+      {% for other in sibling_job_files %}
+        <div class="col-6 col-md-4 col-xl-3">
+          <div class="border rounded p-2 h-100">
+            <a href="/ui/item/{{ other.id }}/">
+              <img
+                src="/api/thumb/{{ other.id }}"
+                alt="{{ other.filename }}"
+                class="img-fluid rounded mb-2"
+                style="max-height:160px; object-fit:contain; background:#fff; border:1px solid #ddd;"
+              >
+            </a>
+
+            <div class="small fw-semibold text-truncate">
+              <a href="/ui/item/{{ other.id }}/">{{ other.filename }}</a>
+            </div>
+
+            <div class="text-muted small mono">{{ other.path }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-muted">No sibling job files found.</div>
+  {% endif %}
+</div>
+
+<div class="page-card p-3 mb-3">
+  <h2 class="h5 mb-3">
+    Related files in same folder
+    <span class="text-muted small">({{ related_same_folder|length }})</span>
+  </h2>
+
+  {% if related_same_folder %}
+    <div class="row g-3">
+      {% for other in related_same_folder %}
+        <div class="col-6 col-md-4 col-xl-3">
+          <div class="border rounded p-2 h-100">
+            <a href="/ui/item/{{ other.id }}/">
+              <img
+                src="/api/thumb/{{ other.id }}"
+                alt="{{ other.filename }}"
+                class="img-fluid rounded mb-2"
+                style="max-height:160px; object-fit:contain; background:#fff; border:1px solid #ddd;"
+              >
+            </a>
+
+            <div class="small fw-semibold text-truncate">
+              <a href="/ui/item/{{ other.id }}/">{{ other.filename }}</a>
+            </div>
+
+            <div class="text-muted small mono">{{ other.path }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="text-muted">No related files found.</div>
+  {% endif %}
+</div>
+
+<div class="page-card p-3 mb-3">
+  <h2 class="h5 mb-3">Linked assets</h2>
+
+  {% if links %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Linked file</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for link in links %}
+            <tr>
+              <td>{{ link.source }}</td>
+              <td>
+                {% if link.linked_image %}
+                  <a href="/ui/item/{{ link.linked_image.id }}/">
+                    {{ link.linked_image.filename }}
+                  </a>
+                {% else %}
+                  <span class="mono small">{{ link.linked_path }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="text-muted">No linked assets.</div>
+  {% endif %}
+</div>
+
+<div class="page-card p-3">
+  <h2 class="h5 mb-3">Used in documents</h2>
+
+  {% if used_in %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in used_in %}
+            <tr>
+              <td>
+                <a href="/ui/item/{{ u.parent.id }}/">
+                  {{ u.parent.filename }}
+                </a>
+              </td>
+              <td>{{ u.source }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="text-muted">No documents reference this asset.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

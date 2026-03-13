@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Similar images</title>
+
+<style>
+body { font-family: Arial; margin:20px }
+
+.grid {
+display:grid;
+grid-template-columns: repeat(auto-fill, 180px);
+gap:12px;
+}
+
+.card img{
+width:180px;
+height:180px;
+object-fit:contain;
+border:1px solid #ccc;
+background:#fff;
+}
+
+.source img{
+max-width:500px;
+max-height:500px;
+border:2px solid #444;
+}
+
+</style>
+</head>
+<body>
+
+<a href="/ui/item/{{ img.id }}">← back to item</a>
+
+<h2>Source Image</h2>
+
+<div class="source">
+<img src="/api/thumb/{{ img.id }}">
+</div>
+
+<h2>Similar Results</h2>
+
+<div id="results" class="grid"></div>
+
+<script>
+
+fetch("/api/similar/{{ img.id }}")
+.then(r => r.json())
+.then(data => {
+
+let container = document.getElementById("results")
+
+data.results.forEach(r => {
+
+let el = document.createElement("div")
+el.className = "card"
+
+el.innerHTML = `
+<a href="/ui/item/${r.id}">
+<img src="/api/thumb/${r.id}">
+</a>
+`
+
+container.appendChild(el)
+
+})
+
+})
+
+</script>
+
+</body>
+</html>

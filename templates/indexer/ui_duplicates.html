@@ -1,0 +1,124 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Duplicates · AI Image Catalog{% endblock %}
+{% block page_title %}Duplicate Groups{% endblock %}
+{% block page_meta %}Exact file duplicates grouped by duplicate_group{% endblock %}
+
+{% block content %}
+
+<div class="page-card p-3 mb-4">
+  <form method="get" class="row g-2">
+    <div class="col">
+      <input
+        type="text"
+        name="q"
+        value="{{ q }}"
+        class="form-control"
+        placeholder="Filter by group id, filename, customer, job, or folder..."
+      >
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary">Filter</button>
+    </div>
+  </form>
+</div>
+
+<div class="page-card p-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width:90px;">Preview</th>
+          <th>Duplicate group</th>
+          <th style="width:120px;">Files</th>
+          <th>Sample file</th>
+          <th>Customer</th>
+          <th>Job</th>
+          <th>Folder</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in page_obj %}
+          <tr>
+            <td>
+              {% if row.sample %}
+                <a href="/ui/duplicates/{{ row.duplicate_group }}/">
+                  <img
+                    src="/api/thumb/{{ row.sample.id }}"
+                    alt=""
+                    class="thumb-sm rounded"
+                    style="width:70px; height:70px; object-fit:cover;"
+                  >
+                </a>
+              {% endif %}
+            </td>
+            <td class="small">
+              <a href="/ui/duplicates/{{ row.duplicate_group }}/" class="text-decoration-none">
+                {{ row.duplicate_group }}
+              </a>
+            </td>
+            <td>
+              <span class="badge text-bg-warning">{{ row.image_count }}</span>
+            </td>
+            <td class="small">
+              {% if row.sample %}
+                <a href="/ui/item/{{ row.sample.id }}/" class="text-decoration-none">
+                  {{ row.sample.filename }}
+                </a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="small">
+              {% if row.sample and row.sample.customer_name %}
+                <a href="/ui/customers/{{ row.sample.customer_name|urlencode }}/" class="text-decoration-none">
+                  {{ row.sample.customer_name }}
+                </a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="small">
+              {% if row.sample and row.sample.probable_job_number %}
+                <a href="/ui/jobs/{{ row.sample.probable_job_number|urlencode }}/" class="text-decoration-none">
+                  {{ row.sample.probable_job_number }}
+                </a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="small text-break">
+              {% if row.sample and row.sample.relative_dir %}
+                {{ row.sample.relative_dir }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="text-center text-muted py-4">No duplicate groups found.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <div class="small text-muted">
+      Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="d-flex gap-2">
+      {% if page_obj.has_previous %}
+        <a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&page={{ page_obj.previous_page_number }}">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&page={{ page_obj.next_page_number }}">Next</a>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

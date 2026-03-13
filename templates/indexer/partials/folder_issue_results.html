@@ -1,0 +1,80 @@
+<div class="page-card p-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width:90px;">Preview</th>
+          <th>Filename</th>
+          <th>Customer</th>
+          <th>Job</th>
+          <th>Folder</th>
+          <th style="width:120px;">Preview</th>
+          <th style="width:120px;">Metadata</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for img in results %}
+          <tr>
+            <td>
+              <a href="/ui/item/{{ img.id }}/">
+                <img
+                  src="/api/thumb/{{ img.id }}"
+                  class="rounded"
+                  style="width:70px;height:70px;object-fit:cover;"
+                >
+              </a>
+            </td>
+
+            <td class="small text-break">
+              <a href="/ui/item/{{ img.id }}/">{{ img.filename }}</a>
+            </td>
+
+            <td class="small">
+              {% if img.customer_name %}
+                <a href="/ui/customers/{{ img.customer_name|urlencode }}/">
+                  {{ img.customer_name }}
+                </a>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="small">
+              {% if img.probable_job_number %}
+                <a href="/ui/jobs/{{ img.probable_job_number|urlencode }}/">
+                  {{ img.probable_job_number }}
+                </a>
+              {% else %}
+                —
+              {% endif %}
+            </td>
+
+            <td class="small text-break">
+              {% if img.folder_id %}
+                <a href="/ui/browse/folder/{{ img.folder_id }}/">
+                  {{ img.relative_dir|default:"/" }}
+                </a>
+              {% else %}
+                {{ img.relative_dir|default:"—" }}
+              {% endif %}
+            </td>
+
+            <td class="small">
+              {{ img.preview_status|default:"—" }}
+            </td>
+
+            <td class="small">
+              {{ img.metadata_status|default:"—" }}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" class="text-center text-muted py-4">
+              No matching items found.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>

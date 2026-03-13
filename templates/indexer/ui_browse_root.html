@@ -1,0 +1,75 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Browse · AI Image Catalog{% endblock %}
+{% block page_title %}Browse Folders{% endblock %}
+{% block page_meta %}Explore indexed folders by directory{% endblock %}
+
+{% block content %}
+<div class="page-card p-3 mb-3">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <h5 class="mb-1">Folder Explorer</h5>
+      <div class="text-muted small">Browse indexed folders from allowed roots</div>
+    </div>
+    <div>
+      <a href="/ui/search/" class="btn btn-sm btn-outline-secondary">Search</a>
+    </div>
+
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for folder in folders %}
+    <div class="col-12 col-md-6 col-xl-4">
+      <div class="page-card p-3 h-100">
+        <div class="d-flex gap-3">
+          <div style="width:96px;">
+            {% if folder.preview_image %}
+              <img
+                src="/api/thumb/{{ folder.preview_image.id }}"
+                class="img-fluid rounded border"
+                alt="{{ folder.name }}"
+              >
+            {% else %}
+              <div class="border rounded d-flex align-items-center justify-content-center text-muted small"
+                   style="width:96px;height:96px;">
+                No preview
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="flex-grow-1 min-w-0">
+            <div class="fw-semibold">
+              <a href="/ui/browse/folder/{{ folder.id }}/" class="text-decoration-none">
+                {{ folder.name }}
+              </a>
+            </div>
+
+            <div class="small text-muted mt-1">
+              {{ folder.image_count }} image{{ folder.image_count|pluralize }}
+            </div>
+
+            {% if folder.customer_name %}
+              <div class="small mt-2"><strong>Customer:</strong> {{ folder.customer_name }}</div>
+            {% endif %}
+
+            {% if folder.probable_job_number %}
+              <div class="small"><strong>Job:</strong> {{ folder.probable_job_number }}</div>
+            {% endif %}
+
+            <div class="small text-muted mt-2 text-break">
+              {{ folder.rel_path }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="col-12">
+      <div class="page-card p-4 text-muted">
+        No folders available yet. Run the folder rebuild command first.
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

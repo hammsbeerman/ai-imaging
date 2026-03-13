@@ -1,0 +1,43 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Folder Issue Detail · AI Image Catalog{% endblock %}
+{% block page_title %}Folder Issue Detail{% endblock %}
+{% block page_meta %}Focused maintenance view for a single folder{% endblock %}
+
+{% block content %}
+
+<div class="page-card p-3 mb-4">
+  <div class="d-flex flex-wrap justify-content-between gap-3">
+    <div>
+      <div class="text-muted small">Folder</div>
+      <div class="fw-semibold">
+        <a href="/ui/browse/folder/{{ folder.id }}/" class="text-decoration-none">
+          {{ folder.rel_path|default:"/" }}
+        </a>
+      </div>
+      {% if folder.root %}
+        <div class="text-muted small">{{ folder.root.name }}</div>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="text-muted small">Issue</div>
+      <div class="fw-semibold">{{ issue_label }}</div>
+    </div>
+
+    <div>
+      <div class="text-muted small">Items</div>
+      <div class="fw-semibold">{{ result_count }}</div>
+    </div>
+  </div>
+</div>
+
+<div id="issue-results">
+  {% include "indexer/partials/folder_issue_results.html" %}
+</div>
+
+<div class="mt-3">
+  <a href="/ui/health/folders/" class="btn btn-outline-secondary btn-sm">Back to folder health</a>
+</div>
+
+{% endblock %}

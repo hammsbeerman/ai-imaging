@@ -1,0 +1,200 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Status · AI Image Catalog{% endblock %}
+{% block page_title %}Status{% endblock %}
+{% block page_meta %}Technical pipeline and queue status{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3">
+    <div class="page-card p-3 h-100">
+      <div class="text-muted small">Total files</div>
+      <div class="display-6 fw-semibold">{{ total_images|default:"0" }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="page-card p-3 h-100">
+      <div class="text-muted small">Indexed</div>
+      <div class="display-6 fw-semibold">{{ indexed_images|default:"0" }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="page-card p-3 h-100">
+      <div class="text-muted small">Pending index</div>
+      <div class="display-6 fw-semibold">{{ pending_images|default:"0" }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-xl-3">
+    <div class="page-card p-3 h-100">
+      <div class="text-muted small">Skipped</div>
+      <div class="display-6 fw-semibold">{{ skipped_images|default:"0" }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="page-card p-3">
+      <h2 class="h5 mb-3">Image pipeline</h2>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            <tr>
+              <th class="text-muted fw-normal">Preview ready</th>
+              <td>{{ preview_ready }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Pending previews</th>
+              <td>{{ pending_previews }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Failed previews</th>
+              <td>{{ failed_previews }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Extracted text count</th>
+              <td>{{ extracted_text_count }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="page-card p-3">
+      <h2 class="h5 mb-3">Scan queue</h2>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            <tr>
+              <th class="text-muted fw-normal">Scan dirs total</th>
+              <td>{{ scan_total }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Scan dirs done</th>
+              <td>{{ scan_done }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Scan dirs pending</th>
+              <td>{{ scan_pending }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Retry-ready</th>
+              <td>{{ scan_ready }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Scan errors</th>
+              <td>{{ scan_errors }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="page-card p-3">
+      <h2 class="h5 mb-3">Settings</h2>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            <tr>
+              <th class="text-muted fw-normal">Enabled</th>
+              <td>
+                {% if settings_obj.enabled %}
+                  <span class="badge text-bg-success">yes</span>
+                {% else %}
+                  <span class="badge text-bg-danger">no</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Scan path</th>
+              <td class="mono small">{{ settings_obj.scan_path }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Index batch size</th>
+              <td>{{ settings_obj.index_batch_size|default:"-" }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Enrich batch size</th>
+              <td>{{ settings_obj.enrich_batch_size|default:"-" }}</td>
+            </tr>
+            <tr>
+              <th class="text-muted fw-normal">Preview size</th>
+              <td>{{ settings_obj.preview_size|default:"-" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="page-card p-3">
+      <h2 class="h5 mb-3">Quick links</h2>
+      <div class="d-grid gap-2">
+        <a class="btn btn-outline-primary" href="/ui/">Dashboard</a>
+        <a class="btn btn-outline-secondary" href="/ui/search/">Search</a>
+        <a class="btn btn-outline-secondary" href="/ui/health/">Index health</a>
+        <a class="btn btn-outline-secondary" href="/admin/">Admin</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page-card p-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h5 mb-0">Recent task logs</h2>
+    <form method="get" class="d-flex gap-2">
+      <input
+        type="text"
+        name="task"
+        class="form-control form-control-sm"
+        style="min-width: 220px;"
+        placeholder="Filter task name"
+        value="{{ task_filter }}"
+      >
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Filter</button>
+    </form>
+  </div>
+
+  {% if logs %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Created</th>
+            <th>Task</th>
+            <th>Level</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+            <tr>
+              <td class="small">{{ log.created }}</td>
+              <td>{{ log.task }}</td>
+              <td>
+                {% if log.level == "ERROR" %}
+                  <span class="badge text-bg-danger">{{ log.level }}</span>
+                {% elif log.level == "WARN" %}
+                  <span class="badge text-bg-warning">{{ log.level }}</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">{{ log.level }}</span>
+                {% endif %}
+              </td>
+              <td class="mono small">{{ log.message }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="text-muted">No logs found.</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Search · AI Image Catalog{% endblock %}
+{% block page_title %}Search{% endblock %}
+{% block page_meta %}Search by text, similarity, duplicates, and folder context{% endblock %}
+
+{% block content %}
+
+<div class="page-card p-3 mb-3">
+  <form
+    action="/ui/search/"
+    method="get"
+    class="row g-2"
+    hx-get="/ui/search/"
+    hx-target="#search-results"
+    hx-select="#search-results"
+    hx-push-url="true"
+  >
+
+    <div class="col-12 col-lg-5">
+      <input
+        type="text"
+        name="q"
+        class="form-control"
+        value="{{ q|default:'' }}"
+        placeholder="Search logo, brochure, truck wrap, customer name..."
+      >
+    </div>
+
+    <div class="col-6 col-lg-2">
+      <select name="mode" class="form-select">
+        <option value="hybrid" {% if mode == "hybrid" or not mode %}selected{% endif %}>Hybrid</option>
+        <option value="semantic" {% if mode == "semantic" %}selected{% endif %}>Semantic</option>
+        <option value="db" {% if mode == "db" %}selected{% endif %}>Database</option>
+        <option value="folder" {% if mode == "folder" %}selected{% endif %}>Folder</option>
+      </select>
+    </div>
+
+    <div class="col-6 col-lg-2">
+      <select name="limit" class="form-select">
+        <option value="24" {% if limit == 24 %}selected{% endif %}>24</option>
+        <option value="48" {% if limit == 48 %}selected{% endif %}>48</option>
+        <option value="96" {% if limit == 96 %}selected{% endif %}>96</option>
+      </select>
+    </div>
+
+    <div class="col-12 col-lg-3 d-grid">
+      <button type="submit" class="btn btn-primary">
+        Search
+      </button>
+    </div>
+    {% if search_folder %}
+      <input type="hidden" name="folder_id" value="{{ search_folder.id }}">
+    {% endif %}
+
+  </form>
+
+  {% if search_folder %}
+  <div class="page-card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <div class="small text-muted">Scoped to folder subtree</div>
+        <div class="fw-semibold">{{ search_folder.rel_path|default:search_folder.name }}</div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/ui/browse/folder/{{ search_folder.id }}/" class="btn btn-sm btn-outline-secondary">
+          Back to folder
+        </a>
+        <a href="/ui/search/?mode={{ mode }}&q={{ q|urlencode }}" class="btn btn-sm btn-outline-secondary">
+          Clear folder scope
+        </a>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+  <div class="small text-muted mt-3">
+
+    <div>
+      <strong>Mode:</strong>
+      {% if mode == "hybrid" or not mode %}
+        Hybrid
+      {% elif mode == "semantic" %}
+        Semantic
+      {% elif mode == "db" %}
+        Database
+      {% elif mode == "folder" %}
+        Folder
+      {% else %}
+        {{ mode }}
+      {% endif %}
+    </div>
+
+    <div class="mt-1">
+      Try:
+      <a href="/ui/search/?q=smith+wedding">smith wedding</a>,
+      <a href="/ui/search/?q=10422">10422</a>,
+      <a href="/ui/search/?q=truck+wrap">truck wrap</a>,
+      <a href="/ui/search/?q=acme+brochure">acme brochure</a>
+    </div>
+
+  </div>
+
+</div>
+
+
+<div class="page-card p-3 mb-3">
+  <form action="/ui/search/" method="post" enctype="multipart/form-data" class="row g-2">
+    {% csrf_token %}
+
+    <div class="col-12 col-lg-8">
+      <input
+        type="file"
+        name="image"
+        class="form-control"
+        accept="image/*"
+      >
+    </div>
+
+    <div class="col-12 col-lg-4 d-grid">
+      <button type="submit" class="btn btn-outline-secondary">
+        Search by uploaded image
+      </button>
+    </div>
+
+  </form>
+</div>
+
+
+<div id="search-results">
+  {% include "indexer/partials/search_results.html" %}
+</div>
+
+{% endblock %}

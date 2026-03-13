@@ -1,0 +1,183 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}{{ folder.name }} · Browse{% endblock %}
+{% block page_title %}{{ folder.name }}{% endblock %}
+{% block page_meta %}Browse folder contents{% endblock %}
+
+{% block content %}
+<div class="page-card p-3 mb-3">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="small mb-2">
+        <a href="/ui/browse/" class="text-decoration-none">Browse</a>
+        {% for crumb in breadcrumbs %}
+          / <a href="/ui/browse/folder/{{ crumb.id }}/" class="text-decoration-none">{{ crumb.name }}</a>
+        {% endfor %}
+      </div>
+
+      <h5 class="mb-1">{{ folder.name }}</h5>
+
+      <div class="small text-muted">
+        {{ folder.image_count }} image{{ folder.image_count|pluralize }}
+      </div>
+
+      {% if folder.rel_path %}
+        <div class="small text-muted mt-1 text-break">{{ folder.rel_path }}</div>
+      {% endif %}
+
+      <div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="/ui/search/?folder_id={{ folder.id }}" class="btn btn-outline-primary btn-sm">
+    Search in this folder
+  </a>
+
+  <a href="/ui/health/folders/{{ folder.id }}/duplicates/" class="btn btn-outline-secondary btn-sm">
+    Duplicates{% if duplicate_count %} ({{ duplicate_count }}){% endif %}
+  </a>
+
+  <a href="/ui/health/folders/{{ folder.id }}/clusters/" class="btn btn-outline-secondary btn-sm">
+    Clusters{% if clustered_count %} ({{ clustered_count }}){% endif %}
+  </a>
+</div>
+
+      {% if folder.customer_name or folder.probable_job_number %}
+        <div class="small mt-2">
+          {% if folder.customer_name %}<span class="me-3"><strong>Customer:</strong> {{ folder.customer_name }}</span>{% endif %}
+          {% if folder.probable_job_number %}<span><strong>Job:</strong> {{ folder.probable_job_number }}</span>{% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="d-flex flex-column gap-2">
+      <a href="{{ search_folder_url }}" class="btn btn-sm btn-outline-primary">
+        Search in this folder
+      </a>
+
+      {% if open_folder_unc %}
+        <div class="small text-muted text-break"><strong>Windows:</strong> {{ open_folder_unc }}</div>
+      {% endif %}
+      {% if open_folder_smb %}
+        <div class="small text-muted text-break"><strong>Mac:</strong> {{ open_folder_smb }}</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if child_folders %}
+  <div class="page-card p-3 mb-3">
+    <h6 class="mb-3">Child folders</h6>
+    <div class="row g-3">
+      {% for child in child_folders %}
+        <div class="col-12 col-md-6 col-xl-4">
+          <a href="/ui/browse/folder/{{ child.id }}/" class="text-decoration-none text-reset">
+            <div class="border rounded p-2 h-100">
+              <div class="d-flex gap-2">
+                <div style="width:72px;">
+                  {% if child.preview_image %}
+                    <img
+                      src="/api/thumb/{{ child.preview_image.id }}"
+                      class="img-fluid rounded border"
+                      alt="{{ child.name }}"
+                    >
+                  {% else %}
+                    <div class="border rounded d-flex align-items-center justify-content-center text-muted small"
+                         style="width:72px;height:72px;">
+                      No preview
+                    </div>
+                  {% endif %}
+                </div>
+
+                <div class="flex-grow-1 min-w-0">
+                  <div class="fw-semibold">
+                    {{ child.name }}
+                  </div>
+
+                  <div class="d-flex flex-wrap gap-2 mt-1">
+                    <span class="badge text-bg-secondary">
+                      {{ child.image_count }} image{{ child.image_count|pluralize }}
+                    </span>
+
+                    {% if child.child_folder_count %}
+                      <span class="badge text-bg-light">
+                        {{ child.child_folder_count }} folder{{ child.child_folder_count|pluralize }}
+                      </span>
+                    {% endif %}
+
+                    {% if child.preview_failed_count %}
+                      <span class="badge text-bg-danger">
+                        {{ child.preview_failed_count }} preview failed
+                      </span>
+                    {% endif %}
+
+                    {% if child.missing_preview_count %}
+                      <span class="badge text-bg-warning">
+                        {{ child.missing_preview_count }} missing preview
+                      </span>
+                    {% endif %}
+
+                    {% if child.duplicate_count %}
+                      <span class="badge text-bg-info">
+                        {{ child.duplicate_count }} duplicate{{ child.duplicate_count|pluralize }}
+                      </span>
+                    {% endif %}
+                  </div>
+
+                  {% if child.customer_name %}
+                    <div class="small mt-1"><strong>Customer:</strong> {{ child.customer_name }}</div>
+                  {% endif %}
+                  {% if child.probable_job_number %}
+                    <div class="small"><strong>Job:</strong> {{ child.probable_job_number }}</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </a>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+<div class="page-card p-3">
+  <h6 class="mb-3">Images in folder</h6>
+
+  <div class="row g-3">
+    {% for img in page_obj %}
+      <div class="col-6 col-md-4 col-xl-2">
+        <div class="border rounded p-2 h-100">
+          <a href="/ui/item/{{ img.id }}/" class="text-decoration-none">
+            <div class="mb-2 text-center">
+              <img
+                src="/api/thumb/{{ img.id }}"
+                class="img-fluid rounded border"
+                alt="{{ img.filename }}"
+                loading="lazy"
+              >
+            </div>
+            <div class="small text-break">{{ img.filename }}</div>
+          </a>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        <div class="text-muted">No images in this folder.</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <div class="mt-3 d-flex justify-content-between align-items-center">
+      <div class="small text-muted">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </div>
+      <div class="d-flex gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline-secondary">Previous</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline-secondary">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}{{ customer_name }} · AI Image Catalog{% endblock %}
+{% block page_title %}{{ customer_name }}{% endblock %}
+{% block page_meta %}Assets grouped by customer{% endblock %}
+
+{% block content %}
+<div class="page-card p-3 mb-3">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="small mb-2">
+        <a href="/ui/customers/" class="text-decoration-none">Customers</a> / {{ customer_name }}
+      </div>
+
+      <h5 class="mb-1">{{ customer_name }}</h5>
+      <div class="small text-muted">{{ total_count }} image{{ total_count|pluralize }}</div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a href="/ui/search/?mode=db&q={{ customer_name|urlencode }}" class="btn btn-sm btn-outline-primary">
+        Search this customer
+      </a>
+    </div>
+  </div>
+</div>
+
+{% if job_numbers %}
+  <div class="page-card p-3 mb-3">
+    <h6 class="mb-2">Jobs</h6>
+    <div class="d-flex flex-wrap gap-2">
+      {% for job in job_numbers %}
+        <a href="/ui/jobs/{{ job|urlencode }}/" class="badge text-bg-light text-decoration-none">
+          {{ job }}
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+{% if folder_paths %}
+  <div class="page-card p-3 mb-3">
+    <h6 class="mb-2">Folders involved</h6>
+    <div class="small text-muted">
+      {% for path in folder_paths %}
+        <div>{{ path }}</div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+<div class="page-card p-3">
+  <h6 class="mb-3">Assets</h6>
+
+  <div class="row g-3">
+    {% for img in page_obj %}
+      <div class="col-6 col-md-4 col-xl-2">
+        <div class="border rounded p-2 h-100">
+          <a href="/ui/item/{{ img.id }}/" class="text-decoration-none">
+            <div class="mb-2 text-center">
+              <img
+                src="/api/thumb/{{ img.id }}"
+                class="img-fluid rounded border"
+                alt="{{ img.filename }}"
+                loading="lazy"
+              >
+            </div>
+            <div class="small text-break">{{ img.filename }}</div>
+
+            {% if img.probable_job_number %}
+              <div class="small text-muted mt-1">Job {{ img.probable_job_number }}</div>
+            {% endif %}
+
+            {% if img.relative_dir %}
+              <div class="small text-muted mt-1 text-break">{{ img.relative_dir }}</div>
+            {% endif %}
+          </a>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        <div class="text-muted">No assets found for this customer.</div>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <div class="mt-3 d-flex justify-content-between align-items-center">
+      <div class="small text-muted">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      </div>
+      <div class="d-flex gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline-secondary">Previous</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline-secondary">Next</a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
