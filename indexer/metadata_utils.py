@@ -140,3 +140,19 @@ def extract_image_metadata(path):
         raise RuntimeError(f"Metadata blocked oversized image: {e}")
 
     return out
+
+def strip_nuls(value):
+    if value is None:
+        return value
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    return value
+
+def clean_text_value(value):
+    if value is None:
+        return value
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, str):
+        return value.replace("\x00", "").strip()
+    return value

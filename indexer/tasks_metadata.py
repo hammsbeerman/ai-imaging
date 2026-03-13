@@ -29,6 +29,29 @@ from indexer.services.pipeline_logging import (
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".gif"}
 
 
+def _clean_text_value(value):
+    if value is None:
+        return value
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="ignore")
+    if isinstance(value, str):
+        return value.replace("\x00", "").strip()
+    return value
+
+
+def _clean_model_text_fields(img: Image, field_names: list[str]) -> None:
+    for field in field_names:
+        if hasattr(img, field):
+            setattr(img, field, _clean_text_value(getattr(img, field, None)))
+
+
+def _clean_metadata_dict(md: dict) -> dict:
+    cleaned = {}
+    for key, value in (md or {}).items():
+        cleaned[key] = _clean_text_value(value)
+    return cleaned
+
+
 def _derive_customer_name(path: str) -> str:
     parts = path.replace("\\", "/").split("/")
 
@@ -70,11 +93,11 @@ def _metadata_one(img: Image) -> None:
     log_stage_start("metadata", img)
 
     ext = normalized_ext(path)
-    img.file_ext = ext
+    img.file_ext = _clean_text_value(ext)
     if not img.ext:
-        img.ext = ext
+        img.ext = _clean_text_value(ext)
 
-    img.mime_type = guess_mime_type(path)
+    img.mime_type = _clean_text_value(guess_mime_type(path))
 
     st = safe_stat(path)
 
@@ -88,55 +111,55 @@ def _metadata_one(img: Image) -> None:
     if hasattr(img, "file_ctime"):
         img.file_ctime = st["file_ctime"]
     if hasattr(img, "sha256") and not img.sha256:
-        img.sha256 = file_sha256(path)
+        img.sha256 = _clean_text_value(file_sha256(path))
 
-    img.folder_tokens = build_folder_tokens(path)
-    img.customer_name = _derive_customer_name(path)
-    img.job_type = _derive_job_type(path, ext)
+    img.folder_tokens = _clean_text_value(build_folder_tokens(path))
+    img.customer_name = _clean_text_value(_derive_customer_name(path))
+    img.job_type = _clean_text_value(_derive_job_type(path, ext))
 
     root_base = _root_base_for_image(img)
 
     if hasattr(img, "probable_job_number"):
-        img.probable_job_number = extract_probable_job_number(path)
+        img.probable_job_number = _clean_text_value(extract_probable_job_number(path))
     if hasattr(img, "relative_dir"):
-        img.relative_dir = relative_dir(path, root=root_base)
+        img.relative_dir = _clean_text_value(relative_dir(path, root=root_base))
         if img.relative_dir in (".",):
             img.relative_dir = ""
     if hasattr(img, "folder_depth"):
         img.folder_depth = folder_depth(path, root=root_base)
 
     if ext in IMAGE_EXTS:
-        md = extract_image_metadata(path)
+        md = _clean_metadata_dict(extract_image_metadata(path))
 
-        img.width = md["width"]
-        img.height = md["height"]
+        img.width = md.get("width")
+        img.height = md.get("height")
         if hasattr(img, "image_width"):
-            img.image_width = md["width"]
+            img.image_width = md.get("width")
         if hasattr(img, "image_height"):
-            img.image_height = md["height"]
+            img.image_height = md.get("height")
 
-        img.dpi_x = md["dpi_x"]
-        img.dpi_y = md["dpi_y"]
-        img.camera_make = md["camera_make"]
-        img.camera_model = md["camera_model"]
-        img.gps_lat = md["gps_lat"]
-        img.gps_lon = md["gps_lon"]
+        img.dpi_x = md.get("dpi_x")
+        img.dpi_y = md.get("dpi_y")
+        img.camera_make = md.get("camera_make", "")
+        img.camera_model = md.get("camera_model", "")
+        img.gps_lat = md.get("gps_lat")
+        img.gps_lon = md.get("gps_lon")
 
-        if md["exif_date_taken"]:
-            img.captured_at = md["exif_date_taken"]
+        if md.get("exif_date_taken"):
+            img.captured_at = md.get("exif_date_taken")
 
         if hasattr(img, "aspect_ratio"):
-            img.aspect_ratio = md["aspect_ratio"]
+            img.aspect_ratio = md.get("aspect_ratio")
         if hasattr(img, "orientation"):
-            img.orientation = md["orientation"]
+            img.orientation = md.get("orientation", "")
         if hasattr(img, "color_mode"):
-            img.color_mode = md["color_mode"]
+            img.color_mode = md.get("color_mode", "")
         if hasattr(img, "bit_depth"):
-            img.bit_depth = md["bit_depth"]
+            img.bit_depth = md.get("bit_depth")
         if hasattr(img, "page_count"):
-            img.page_count = md["page_count"]
+            img.page_count = md.get("page_count")
         if hasattr(img, "exif_date_taken"):
-            img.exif_date_taken = md["exif_date_taken"]
+            img.exif_date_taken = md.get("exif_date_taken")
 
     img.metadata_status = ProcessingStatus.OK
     img.metadata_error = ""
@@ -145,6 +168,26 @@ def _metadata_one(img: Image) -> None:
         img.metadata_run_at = timezone.now()
 
     img.metadata_version = (img.metadata_version or 0) + 1 if isinstance(img.metadata_version, int) else 2
+
+    _clean_model_text_fields(
+        img,
+        [
+            "file_ext",
+            "ext",
+            "mime_type",
+            "folder_tokens",
+            "customer_name",
+            "job_type",
+            "camera_make",
+            "camera_model",
+            "sha256",
+            "probable_job_number",
+            "relative_dir",
+            "orientation",
+            "color_mode",
+            "metadata_error",
+        ],
+    )
 
     update_fields = [
         "file_ext",
@@ -220,7 +263,7 @@ def extract_metadata_task(image_id: str):
         return {"ok": True, "id": image_id}
     except Exception as e:
         img.metadata_status = ProcessingStatus.FAILED
-        img.metadata_error = str(e)[:2000]
+        img.metadata_error = _clean_text_value(str(e))[:2000]
 
         update_fields = ["metadata_status", "metadata_error"]
         if hasattr(img, "metadata_run_at"):
