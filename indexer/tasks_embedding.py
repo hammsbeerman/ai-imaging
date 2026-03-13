@@ -21,6 +21,23 @@ from indexer.services.pipeline_logging import (
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 
+def _embedding_source_path(img: Image) -> str | None:
+    preview_path = abs_preview_path(img.preview_path)
+    thumb_path = abs_preview_path(img.thumb_path)
+
+    if preview_path and os.path.exists(preview_path):
+        return preview_path
+
+    if thumb_path and os.path.exists(thumb_path):
+        return thumb_path
+
+    ext = (img.file_ext or img.ext or os.path.splitext(img.filename)[1]).lower()
+    if ext in IMAGE_EXTENSIONS and os.path.exists(img.path):
+        return img.path
+
+    return None
+
+
 @shared_task
 def queue_missing_embeddings_task(batch_size=500, chunk_size=25):
     close_old_connections()
@@ -170,15 +187,7 @@ def _embed_one(image_id):
         update_fields.append("embedding_run_at")
     img.save(update_fields=update_fields)
 
-    ext = (img.file_ext or img.ext or os.path.splitext(img.filename)[1]).lower()
-
-    source_path = None
-    preview_path = abs_preview_path(img.preview_path)
-
-    if preview_path and os.path.exists(preview_path):
-        source_path = preview_path
-    elif ext in IMAGE_EXTENSIONS and os.path.exists(img.path):
-        source_path = img.path
+    source_path = _embedding_source_path(img)
 
     if not source_path:
         img.embedding_status = ProcessingStatus.SKIPPED
@@ -208,6 +217,8 @@ def _embed_one(image_id):
             "file_ext": img.file_ext or img.ext or "",
             "customer_name": img.customer_name or "",
             "job_type": img.job_type or "",
+            "relative_dir": getattr(img, "relative_dir", "") or "",
+            "probable_job_number": getattr(img, "probable_job_number", "") or "",
         },
     )
 
@@ -220,5 +231,5 @@ def _embed_one(image_id):
         update_fields.append("embedding_run_at")
     img.save(update_fields=update_fields)
 
-    log_stage_ok("embedding", img)
+    log_stage_ok("embedding", img, f"source={os.path.basename(source_path)}")
     return "ok"

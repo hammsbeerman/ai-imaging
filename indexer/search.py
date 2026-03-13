@@ -328,6 +328,8 @@ def embed_text(text: str) -> list[float]:
 
 
 def embed_uploaded_image(file_obj) -> list[float]:
+    import gc
+
     model, preprocess, _tokenizer = get_model()
 
     file_obj.seek(0)
@@ -338,8 +340,18 @@ def embed_uploaded_image(file_obj) -> list[float]:
         emb = model.encode_image(image_input)
 
     emb = emb / emb.norm(dim=-1, keepdim=True)
-    return emb[0].float().cpu().tolist()
+    vector = emb[0].float().cpu().tolist()
 
+    # ---- important cleanup to prevent RAM growth ----
+    del emb
+    del image_input
+    del im
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    return vector
 
 def search_text(
     text: str,
@@ -551,10 +563,19 @@ def hybrid_search(
     ranked = []
     for point_id, base_score in scores.items():
         row = dict(rows.get(point_id) or {})
+        img = image_map.get(point_id)
+
+        if scope and not _row_in_folder_scope(row, scope):
+            continue
+
+        if img:
+            final_score = _rank_result(img, text, vector_score=base_score)
+            fields = _build_text_blob(img)
+        else:
+            final_score = float(base_score or 0.0)
+            fields = {}
 
         labels = []
-
-        fields = _build_text_blob(img) if img else {}
 
         if img and q in fields.get("filename", ""):
             labels.append("filename")
@@ -575,7 +596,6 @@ def hybrid_search(
             labels.append("semantic")
 
         row["match_labels"] = labels
-
         row["score"] = round(final_score, 4)
         row["point_id"] = point_id
         ranked.append(row)

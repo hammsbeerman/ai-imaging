@@ -62,6 +62,22 @@ def _get_or_build_preview(img: Image, force: bool = False) -> str | None:
     return preview_abs if preview_abs and os.path.exists(preview_abs) else None
 
 
+def _embedding_source_for_index(img: Image) -> str | None:
+    preview_abs = abs_preview_path(img.preview_path)
+    thumb_abs = abs_preview_path(img.thumb_path)
+
+    if preview_abs and os.path.exists(preview_abs):
+        return preview_abs
+
+    if thumb_abs and os.path.exists(thumb_abs):
+        return thumb_abs
+
+    if os.path.exists(img.path):
+        return img.path
+
+    return None
+
+
 def run_index(batch_size: int = 100, image_ids=None):
     settings_obj = IndexerSettings.load()
     if not settings_obj.enabled:
@@ -80,13 +96,15 @@ def run_index(batch_size: int = 100, image_ids=None):
     for img in images:
         processed += 1
         try:
-            preview = _get_or_build_preview(img)
-            if not preview:
+            _get_or_build_preview(img)
+
+            source_path = _embedding_source_for_index(img)
+            if not source_path:
                 failed += 1
-                log("index", f"no preview path for {img.path}", "WARN")
+                log("index", f"no embedding source for {img.path}", "WARN")
                 continue
 
-            vector = embed_image(preview)
+            vector = embed_image(source_path)
 
             client.upsert(
                 collection_name=COLLECTION,
@@ -97,6 +115,10 @@ def run_index(batch_size: int = 100, image_ids=None):
                         "path": img.path,
                         "filename": img.filename,
                         "root_id": img.root_id,
+                        "relative_dir": getattr(img, "relative_dir", "") or "",
+                        "probable_job_number": getattr(img, "probable_job_number", "") or "",
+                        "customer_name": getattr(img, "customer_name", "") or "",
+                        "job_type": getattr(img, "job_type", "") or "",
                     },
                 }],
             )
