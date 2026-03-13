@@ -69,13 +69,20 @@ from indexer.services.preview_health import (
 
 
 def _allowed_root_ids(user) -> set[int]:
+    if not getattr(user, "is_authenticated", False):
+        return set()
+
     if getattr(user, "is_superuser", False):
         return set(
-            Image.objects.filter(root_id__isnull=False)
+            Image.objects.exclude(root__isnull=True)
             .values_list("root_id", flat=True)
             .distinct()
         )
-    return set(UserAccessRoot.objects.filter(user=user).values_list("root_id", flat=True))
+
+    return set(
+        UserAccessRoot.objects.filter(user_id=user.id)
+        .values_list("root_id", flat=True)
+    )
 
 
 def _open_folder_links_for(img: Image, settings: IndexerSettings):
@@ -237,7 +244,7 @@ def ui_collections(request):
         },
     )
 
-
+@login_required
 def ui_home(request):
     settings = IndexerSettings.load()
     allowed = _allowed_root_ids(request.user)
