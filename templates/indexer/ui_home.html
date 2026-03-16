@@ -402,26 +402,36 @@
 <div class="page-card p-3 mb-4">
   <h2 class="h5 mb-3">Pipeline Controls</h2>
 
-  <div class="d-flex flex-wrap gap-2">
+   <div class="d-flex flex-wrap gap-2">
+
     <form method="post" action="{% url 'ui_requeue_stage' 'preview' %}">
       {% csrf_token %}
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Repreview All</button>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">
+        Repreview All
+      </button>
     </form>
 
     <form method="post" action="{% url 'ui_requeue_stage' 'text' %}">
       {% csrf_token %}
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Re-OCR All</button>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">
+        Re-OCR All
+      </button>
     </form>
 
     <form method="post" action="{% url 'ui_requeue_stage' 'metadata' %}">
       {% csrf_token %}
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Rebuild Metadata</button>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">
+        Rebuild Metadata
+      </button>
     </form>
 
     <form method="post" action="{% url 'ui_requeue_stage' 'embedding' %}">
       {% csrf_token %}
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Rebuild Embeddings</button>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">
+        Rebuild Embeddings
+      </button>
     </form>
+
   </div>
 
   <div class="small text-muted mt-3">

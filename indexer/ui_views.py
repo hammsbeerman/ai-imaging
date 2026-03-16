@@ -1690,3 +1690,36 @@ def ui_folder_issue_detail(request, folder_id, issue):
         "indexer/ui_folder_issue_detail.html",
         ctx,
     )
+
+@require_POST
+def ui_requeue_stage_bulk(request, stage):
+    qs = Image.objects.all()
+
+    if stage == "preview":
+        updated = qs.exclude(preview_status=PreviewStatus.PENDING).update(
+            preview_status=PreviewStatus.PENDING,
+            preview_error="",
+        )
+        messages.success(request, f"Requeued preview for {updated} items.")
+    elif stage == "text":
+        updated = qs.exclude(text_status=ProcessingStatus.PENDING).update(
+            text_status=ProcessingStatus.PENDING,
+            text_error="",
+        )
+        messages.success(request, f"Requeued text extraction for {updated} items.")
+    elif stage == "metadata":
+        updated = qs.exclude(metadata_status=ProcessingStatus.PENDING).update(
+            metadata_status=ProcessingStatus.PENDING,
+            metadata_error="",
+        )
+        messages.success(request, f"Requeued metadata for {updated} items.")
+    elif stage == "embedding":
+        updated = qs.exclude(embedding_status=ProcessingStatus.PENDING).update(
+            embedding_status=ProcessingStatus.PENDING,
+            embedding_error="",
+        )
+        messages.success(request, f"Requeued embeddings for {updated} items.")
+    else:
+        messages.error(request, f"Unknown stage: {stage}")
+
+    return redirect("ui_home_alt")
