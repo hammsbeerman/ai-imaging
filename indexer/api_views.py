@@ -17,7 +17,7 @@ from .archive_queries import (
 )
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_search(request):
     context = search_archive(
@@ -29,56 +29,56 @@ def api_archive_search(request):
     return render_api_response(request, "indexer/api/search_results.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_item_detail(request, image_id: str):
     context = image_detail_payload(image_id)
     return render_api_response(request, "indexer/api/item_detail.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_item_similar(request, image_id: str):
     context = image_similar_payload(image_id)
     return render_api_response(request, "indexer/api/item_similar.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_folder_detail(request, folder_id: int):
     context = folder_detail_payload(folder_id)
     return render_api_response(request, "indexer/api/folder_detail.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_folder_story(request, folder_id: int):
     context = folder_story_payload(folder_id)
     return render_api_response(request, "indexer/api/folder_story.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_customer_detail(request, customer_name: str):
     context = customer_payload(customer_name)
     return render_api_response(request, "indexer/api/customer_detail.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_job_detail(request, job_number: str):
     context = job_payload(job_number)
     return render_api_response(request, "indexer/api/job_detail.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_timeline(request):
     context = timeline_payload()
     return render_api_response(request, "indexer/api/timeline.html", context)
 
 
-@login_required
+#@login_required
 @require_GET
 def api_archive_map(request):
     context = archive_map_payload()

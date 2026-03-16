@@ -730,6 +730,12 @@ def search_by_folder(
         for img in qs
     ]
 
+def _result_field(obj, key: str, default=""):
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def detect_match_reasons(img, query: str) -> list[str]:
     if not query:
         return []
@@ -737,39 +743,42 @@ def detect_match_reasons(img, query: str) -> list[str]:
     q = query.lower()
     reasons = []
 
-    if img.filename and q in img.filename.lower():
+    filename = _result_field(img, "filename", "") or ""
+    customer_name = _result_field(img, "customer_name", "") or ""
+    probable_job_number = _result_field(img, "probable_job_number", "") or ""
+    relative_dir = _result_field(img, "relative_dir", "") or ""
+    folder_tokens = _result_field(img, "folder_tokens", "") or ""
+    text = _result_field(img, "text", "") or ""
+    extracted_text = _result_field(img, "extracted_text", "") or ""
+    ocr_text = _result_field(img, "ocr_text", "") or ""
+    score = _result_field(img, "score", None)
+
+    if filename and q in filename.lower():
         reasons.append("filename")
 
-    if img.customer_name and q in img.customer_name.lower():
+    if customer_name and q in customer_name.lower():
         reasons.append("customer")
 
-    if img.probable_job_number and q in str(img.probable_job_number).lower():
+    if probable_job_number and q in str(probable_job_number).lower():
         reasons.append("job")
 
-    if img.relative_dir and q in img.relative_dir.lower():
+    if relative_dir and q in relative_dir.lower():
         reasons.append("folder")
-    elif img.folder_tokens and q in img.folder_tokens.lower():
+    elif folder_tokens and q in folder_tokens.lower():
         reasons.append("folder")
 
-    text_blob = " ".join(
-        [
-            img.text or "",
-            img.extracted_text or "",
-            getattr(img, "ocr_text", "") or "",
-        ]
-    ).lower()
-
+    text_blob = " ".join([text, extracted_text, ocr_text]).lower()
     if q in text_blob:
         reasons.append("ocr")
 
-    if not reasons and getattr(img, "score", None) is not None:
+    if not reasons and score is not None:
         reasons.append("semantic")
 
     return reasons
 
 def apply_match_reasons(results, query: str, mode: str):
     """
-    Attach match-reason labels to search results.
+    Attach match labels to search results.
     """
 
     if not results:
@@ -777,10 +786,18 @@ def apply_match_reasons(results, query: str, mode: str):
 
     if not query or mode not in {"semantic", "hybrid", "db"}:
         for img in results:
-            img.match_reasons = []
+            if isinstance(img, dict):
+                img["match_labels"] = []
+            else:
+                img.match_labels = []
         return results
 
     for img in results:
-        img.match_reasons = detect_match_reasons(img, query)
+        labels = detect_match_reasons(img, query)
+
+        if isinstance(img, dict):
+            img["match_labels"] = labels
+        else:
+            img.match_labels = labels
 
     return results
