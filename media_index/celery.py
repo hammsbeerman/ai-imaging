@@ -1,20 +1,23 @@
 import os
+
 from celery import Celery
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "media_index.settings")
 
 app = Celery("media_index")
 app.config_from_object("django.conf:settings", namespace="CELERY")
-app.autodiscover_tasks(
-    [
-        "indexer",
-    ]
-)
+app.autodiscover_tasks()
 
-existing_imports = tuple(getattr(app.conf, "imports", ()) or ())
-app.conf.imports = existing_imports + (
+# Explicit imports help avoid stale autodiscovery issues in production.
+app.conf.imports = (
     "indexer.tasks",
-    "indexer.tasks_preview",
+    "indexer.tasks_discovery",
     "indexer.tasks_metadata",
+    "indexer.tasks_preview",
+    "indexer.tasks_text",
+    "indexer.tasks_embedding",
     "indexer.tasks_dedupe",
+    "indexer.tasks_duplicate_groups",
+    "indexer.tasks_preview_repair",
+    "indexer.tasks_maintenance",
 )

@@ -1,0 +1,14 @@
+<div class="card"><div class="card-header">Archive Search</div><div class="card-body">
+  <div class="mb-2 text-muted">{{ count }} result{{ count|pluralize }} for “{{ query }}”</div>
+  <div class="list-group">
+    {% for item in results %}
+      <div class="list-group-item">
+        <div class="fw-bold">{{ item.filename }}</div>
+        <div class="small text-muted">{{ item.path }}</div>
+        {% if item.match_reasons %}<div class="mt-1">{% for reason in item.match_reasons %}<span class="badge text-bg-light me-1">{{ reason }}</span>{% endfor %}</div>{% endif %}
+      </div>
+    {% empty %}
+      <div class="text-muted">No results.</div>
+    {% endfor %}
+  </div>
+</div></div>
