@@ -74,7 +74,7 @@
                 <div style="width:72px;">
                   {% if child.preview_image %}
                     <img
-                      src="/api/thumb/{{ child.preview_image.id }}"
+                      src="/api/thumb/{{ child.preview_image.id }}/"
                       class="img-fluid rounded border"
                       alt="{{ child.name }}"
                     >
@@ -147,7 +147,7 @@
           <a href="/ui/item/{{ img.id }}/" class="text-decoration-none">
             <div class="mb-2 text-center">
               <img
-                src="/api/thumb/{{ img.id }}"
+                src="/api/thumb/{{ img.id }}/"
                 class="img-fluid rounded border"
                 alt="{{ img.filename }}"
                 loading="lazy"
