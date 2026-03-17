@@ -251,8 +251,6 @@ def ui_collections(request):
 
 @login_required
 def ui_home(request):
-    settings = IndexerSettings.load()
-
     stats = ArchiveStats.objects.filter(scope="global").first()
     if not stats:
         stats = ArchiveStats(
@@ -320,9 +318,6 @@ def ui_home(request):
         "skipped": stats.embedding_skipped or 0,
     }
 
-    exact_duplicate_groups = getattr(stats, "duplicate_groups", 0) or 0
-    exact_duplicate_file_count = getattr(stats, "duplicate_items", 0) or 0
-
     text_quality = {
         "native_pdf": getattr(stats, "text_native_pdf", 0) or 0,
         "ocr_image": getattr(stats, "text_ocr_image", 0) or 0,
@@ -386,66 +381,7 @@ def ui_home(request):
         },
     ]
 
-    queue_snapshot = None
-    try:
-        queue_snapshot = QueueHealthSnapshot.objects.filter(scope="global").first()
-    except Exception:
-        queue_snapshot = None
-
-    try:
-        scan_queue = get_scan_queue_counts()
-    except Exception:
-        scan_queue = {}
-
-    try:
-        preview_queue = get_preview_queue_counts()
-    except Exception:
-        preview_queue = {}
-
-    try:
-        text_queue = get_text_queue_counts()
-    except Exception:
-        text_queue = {}
-
-    try:
-        metadata_queue = get_metadata_queue_counts()
-    except Exception:
-        metadata_queue = {}
-
-    try:
-        embedding_queue = get_embedding_queue_counts()
-    except Exception:
-        embedding_queue = {}
-
-    try:
-        mount_health = get_mount_health()
-    except Exception:
-        mount_health = {}
-
-    try:
-        missing_ok_previews = count_missing_ok_previews()
-    except Exception:
-        missing_ok_previews = 0
-
-    try:
-        preview_error_buckets = get_preview_error_buckets(limit=8)
-    except Exception:
-        preview_error_buckets = []
-
-    try:
-        unsupported_ext_buckets = get_unsupported_ext_buckets(limit=8)
-    except Exception:
-        unsupported_ext_buckets = []
-
-    try:
-        stuck_processing = get_stuck_processing_counts(timeout_minutes=30)
-    except Exception:
-        stuck_processing = {}
-
-    try:
-        top_errors = get_top_pipeline_errors(limit=10)
-    except Exception:
-        top_errors = []
+    queue_snapshot = QueueHealthSnapshot.objects.filter(scope="global").first()
 
     metric_task_names = [
         "rebuild_archive_stats_task",
@@ -457,24 +393,15 @@ def ui_home(request):
         "queue_missing_metadata_task",
         "reset_stale_processing_task",
     ]
-
-    try:
-        recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
-    except Exception:
-        recent_metrics = []
-
+    recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
     latest_metric_by_task = {}
     for row in recent_metrics:
         latest_metric_by_task.setdefault(row.task_name, row)
 
-    try:
-        worst_folders = list(
-            FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10]
-        )
-    except Exception:
-        worst_folders = []
+    worst_folders = list(
+        FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10]
+    )
 
-    task_runtime_rows = []
     runtime_labels = {
         "rebuild_archive_stats_task": "Archive stats rebuild",
         "rebuild_queue_health_snapshot_task": "Queue snapshot rebuild",
@@ -485,7 +412,7 @@ def ui_home(request):
         "queue_missing_metadata_task": "Metadata queue batch",
         "reset_stale_processing_task": "Recovery reset",
     }
-
+    task_runtime_rows = []
     for task_name, label in runtime_labels.items():
         metric = latest_metric_by_task.get(task_name)
         task_runtime_rows.append(
@@ -504,21 +431,21 @@ def ui_home(request):
         {
             "total_files": total_files,
             "indexed": indexed,
-            "exact_duplicate_groups": exact_duplicate_groups,
-            "exact_duplicate_file_count": exact_duplicate_file_count,
+            "exact_duplicate_groups": getattr(stats, "duplicate_groups", 0) or 0,
+            "exact_duplicate_file_count": getattr(stats, "duplicate_items", 0) or 0,
             "text_quality": text_quality,
             "graph_rows": graph_rows,
-            "mount_health": mount_health,
-            "missing_ok_previews": missing_ok_previews,
-            "preview_error_buckets": preview_error_buckets,
-            "unsupported_ext_buckets": unsupported_ext_buckets,
-            "scan_queue": scan_queue,
-            "preview_queue": preview_queue,
-            "text_queue": text_queue,
-            "metadata_queue": metadata_queue,
-            "embedding_queue": embedding_queue,
-            "stuck_processing": stuck_processing,
-            "top_errors": top_errors,
+            "mount_health": {},
+            "missing_ok_previews": 0,
+            "preview_error_buckets": [],
+            "unsupported_ext_buckets": [],
+            "scan_queue": {},
+            "preview_queue": {},
+            "text_queue": {},
+            "metadata_queue": {},
+            "embedding_queue": {},
+            "stuck_processing": {},
+            "top_errors": [],
             "task_runtime_rows": task_runtime_rows,
             "worst_folders": worst_folders,
             "stats_updated_at": getattr(stats, "updated_at", None),
