@@ -4,13 +4,14 @@ import tempfile
 
 from PIL import Image as PILImage
 from celery import shared_task
-from django.db import close_old_connections
+from django.db import close_old_connections, transaction
 from django.utils import timezone
 
 from indexer.models import Image, ProcessingStatus, PreviewStatus
 from indexer.ocr_utils import ocr_image, looks_like_useful_text, clean_ocr_text
 from indexer.locks import acquire_lock, release_lock
 from indexer.tasklog import log
+from indexer.tasks_metrics import record_task_metric
 from indexer.services.pipeline_logging import (
     log_stage_start,
     log_stage_ok,
@@ -208,7 +209,8 @@ def _text_one(img: Image) -> None:
 def _process_one_text_id(image_id: str) -> str:
     img = Image.objects.get(id=image_id)
 
-    img.text_status = ProcessingStatus.PROCESSING
+    if img.text_status != ProcessingStatus.PROCESSING:
+        img.text_status = ProcessingStatus.PROCESSING
     img.text_error = ""
     update_fields = ["text_status", "text_error"]
     if hasattr(img, "text_run_at"):

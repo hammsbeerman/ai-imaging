@@ -22,6 +22,8 @@ from indexer.models import (
     ProcessingStatus,
     PreviewStatus,
     ArchiveStats,
+    FolderHealthSnapshot,
+    QueueHealthSnapshot,
 )
 from indexer.open_links import build_smb_folder, build_unc_folder, folder_rel
 from indexer.tasks_preview import process_preview_task
@@ -49,6 +51,7 @@ from indexer.services.queue_health_service import (
     get_recent_tasklog_rows,
     get_stuck_processing_counts,
     get_top_pipeline_errors,
+    get_recent_task_metrics,
 )
 from indexer.search import (
     discover_clusters,
@@ -248,7 +251,6 @@ def ui_collections(request):
 @login_required
 def ui_home(request):
     settings = IndexerSettings.load()
-    allowed = _allowed_root_ids(request.user)
 
     stats = ArchiveStats.objects.filter(scope="global").first()
     if not stats:
@@ -258,68 +260,82 @@ def ui_home(request):
             indexed_files=0,
             preview_ok=0,
             preview_pending=0,
+            preview_processing=0,
             preview_failed=0,
             preview_unsupported=0,
             text_ok=0,
             text_pending=0,
+            text_processing=0,
             text_failed=0,
             text_skipped=0,
             metadata_ok=0,
             metadata_pending=0,
+            metadata_processing=0,
             metadata_failed=0,
             metadata_skipped=0,
             embedding_ok=0,
             embedding_pending=0,
+            embedding_processing=0,
             embedding_failed=0,
             embedding_skipped=0,
+            duplicate_groups=0,
+            duplicate_items=0,
+            text_native_pdf=0,
+            text_ocr_image=0,
+            text_high_conf=0,
+            text_mid_conf=0,
+            text_low_conf=0,
         )
 
-    total_files = stats.total_files
-    indexed = stats.indexed_files
+    total_files = stats.total_files or 0
+    indexed = stats.indexed_files or 0
 
     preview_counts = {
-        "ok": stats.preview_ok,
-        "pending_ready": stats.preview_pending,
-        "failed": stats.preview_failed,
-        "unsupported": stats.preview_unsupported,
+        "ok": stats.preview_ok or 0,
+        "pending_ready": stats.preview_pending or 0,
+        "processing": getattr(stats, "preview_processing", 0) or 0,
+        "failed": stats.preview_failed or 0,
+        "unsupported": stats.preview_unsupported or 0,
     }
-
     text_counts = {
-        "ok": stats.text_ok,
-        "pending_ready": stats.text_pending,
-        "failed": stats.text_failed,
-        "skipped": stats.text_skipped,
+        "ok": stats.text_ok or 0,
+        "pending_ready": stats.text_pending or 0,
+        "processing": getattr(stats, "text_processing", 0) or 0,
+        "failed": stats.text_failed or 0,
+        "skipped": stats.text_skipped or 0,
     }
-
     metadata_counts = {
-        "ok": stats.metadata_ok,
-        "pending_ready": stats.metadata_pending,
-        "failed": stats.metadata_failed,
-        "skipped": stats.metadata_skipped,
+        "ok": stats.metadata_ok or 0,
+        "pending_ready": stats.metadata_pending or 0,
+        "processing": getattr(stats, "metadata_processing", 0) or 0,
+        "failed": stats.metadata_failed or 0,
+        "skipped": stats.metadata_skipped or 0,
     }
-
     embedding_counts = {
-        "ok": stats.embedding_ok,
-        "pending_ready": stats.embedding_pending,
-        "failed": stats.embedding_failed,
-        "skipped": stats.embedding_skipped,
+        "ok": stats.embedding_ok or 0,
+        "pending_ready": stats.embedding_pending or 0,
+        "processing": getattr(stats, "embedding_processing", 0) or 0,
+        "failed": stats.embedding_failed or 0,
+        "skipped": stats.embedding_skipped or 0,
     }
 
-    dupes = (
-        Image.objects.filter(skip_index=False)
-        .exclude(duplicate_group="")
-        .values("duplicate_group")
-        .annotate(c=Count("id"))
-        .filter(c__gt=1)
-    )
-    exact_duplicate_groups = dupes.count()
-    exact_duplicate_file_count = sum(row["c"] for row in dupes)
+    exact_duplicate_groups = getattr(stats, "duplicate_groups", 0) or 0
+    exact_duplicate_file_count = getattr(stats, "duplicate_items", 0) or 0
+
+    text_quality = {
+        "native_pdf": getattr(stats, "text_native_pdf", 0) or 0,
+        "ocr_image": getattr(stats, "text_ocr_image", 0) or 0,
+        "high_conf": getattr(stats, "text_high_conf", 0) or 0,
+        "mid_conf": getattr(stats, "text_mid_conf", 0) or 0,
+        "low_conf": getattr(stats, "text_low_conf", 0) or 0,
+    }
 
     graph_rows = [
         {
             "label": "Preview",
             "done": preview_counts["ok"],
             "ready": preview_counts["pending_ready"],
+            "processing": preview_counts["processing"],
             "failed": preview_counts["failed"],
             "other": preview_counts["unsupported"],
             "done_pct": _pct(preview_counts["ok"], total_files),
@@ -332,6 +348,7 @@ def ui_home(request):
             "label": "Text",
             "done": text_counts["ok"],
             "ready": text_counts["pending_ready"],
+            "processing": text_counts["processing"],
             "failed": text_counts["failed"],
             "other": text_counts["skipped"],
             "done_pct": _pct(text_counts["ok"], total_files),
@@ -344,6 +361,7 @@ def ui_home(request):
             "label": "Metadata",
             "done": metadata_counts["ok"],
             "ready": metadata_counts["pending_ready"],
+            "processing": metadata_counts["processing"],
             "failed": metadata_counts["failed"],
             "other": metadata_counts["skipped"],
             "done_pct": _pct(metadata_counts["ok"], total_files),
@@ -356,6 +374,7 @@ def ui_home(request):
             "label": "Embedding",
             "done": embedding_counts["ok"],
             "ready": embedding_counts["pending_ready"],
+            "processing": embedding_counts["processing"],
             "failed": embedding_counts["failed"],
             "other": embedding_counts["skipped"],
             "done_pct": _pct(embedding_counts["ok"], total_files),
@@ -366,181 +385,86 @@ def ui_home(request):
         },
     ]
 
-    recent_previewed = list(
-        Image.objects
-        .filter(preview_status=PreviewStatus.OK)
-        .exclude(preview_path__isnull=True)
-        .exclude(preview_path="")
-        .order_by("-preview_created_at")
-        .only("id", "filename", "path", "preview_path", "thumb_path")[:5]
-    )
-
-    recent_text = list(
-        Image.objects
-        .filter(text_status=ProcessingStatus.OK)
-        .exclude(text_run_at__isnull=True)
-        .order_by("-text_run_at")
-        .only("id", "filename", "path", "text_run_at")[:5]
-    )
-
-    recent_metadata = list(
-        Image.objects
-        .filter(metadata_status=ProcessingStatus.OK)
-        .exclude(metadata_run_at__isnull=True)
-        .order_by("-metadata_run_at")
-        .only("id", "filename", "path", "metadata_run_at")[:5]
-    )
-
-    recent_embedding = list(
-        Image.objects
-        .filter(embedding_status=ProcessingStatus.OK)
-        .exclude(embedding_run_at__isnull=True)
-        .order_by("-embedding_run_at")
-        .only("id", "filename", "path", "embedding_run_at")[:5]
-    )
-
-    text_quality = {
-        "native_pdf": Image.objects.filter(
-            text_status=ProcessingStatus.OK,
-            text_source="pdf_text",
-        ).count(),
-        "ocr_image": Image.objects.filter(
-            text_status=ProcessingStatus.OK,
-            text_source="ocr_image",
-        ).count(),
-        "high_conf": Image.objects.filter(
-            text_status=ProcessingStatus.OK,
-            text_confidence__gte=85,
-        ).count(),
-        "mid_conf": Image.objects.filter(
-            text_status=ProcessingStatus.OK,
-            text_confidence__gte=60,
-            text_confidence__lt=85,
-        ).count(),
-        "low_conf": Image.objects.filter(
-            text_status=ProcessingStatus.OK,
-            text_confidence__lt=60,
-        ).count(),
-    }
-
-    worst_folders = Folder.objects.select_related("root")
-
-    if not request.user.is_superuser:
-        if allowed:
-            worst_folders = worst_folders.filter(root_id__in=allowed)
-        else:
-            worst_folders = worst_folders.none()
-
-    worst_folders = worst_folders.annotate(
-        calc_preview_missing_count=Count(
-            "images",
-            filter=Q(images__preview_status=PreviewStatus.PENDING),
-            distinct=True,
-        ),
-        calc_preview_failed_count=Count(
-            "images",
-            filter=Q(images__preview_status=PreviewStatus.FAILED),
-            distinct=True,
-        ),
-        calc_metadata_missing_count=Count(
-            "images",
-            filter=Q(images__metadata_status=ProcessingStatus.PENDING),
-            distinct=True,
-        ),
-        calc_metadata_failed_count=Count(
-            "images",
-            filter=Q(images__metadata_status=ProcessingStatus.FAILED),
-            distinct=True,
-        ),
-    ).annotate(
-        health_score=(
-            Case(
-                When(calc_preview_failed_count__gt=0, then=3),
-                default=0,
-                output_field=IntegerField(),
-            )
-            + Case(
-                When(calc_metadata_failed_count__gt=0, then=3),
-                default=0,
-                output_field=IntegerField(),
-            )
-            + Case(
-                When(calc_preview_missing_count__gt=0, then=2),
-                default=0,
-                output_field=IntegerField(),
-            )
-            + Case(
-                When(calc_metadata_missing_count__gt=0, then=2),
-                default=0,
-                output_field=IntegerField(),
-            )
-        )
-    ).filter(
-        health_score__gt=0
-    ).only(
-        "id",
-        "name",
-        "rel_path",
-        "root__name",
-        "root_id",
-        "parent_id",
-    ).order_by(
-        "-health_score",
-        "-calc_preview_failed_count",
-        "-calc_metadata_failed_count",
-        "rel_path",
-    )[:10]
-
-    mount_health = get_mount_health()
-    missing_ok_previews = count_missing_ok_previews(limit=3000)
-    preview_error_buckets = get_preview_error_buckets(limit=8)
-    unsupported_ext_buckets = get_unsupported_ext_buckets(limit=8)
-
+    queue_snapshot = QueueHealthSnapshot.objects.filter(scope="global").first()
     scan_queue = get_scan_queue_counts()
     preview_queue = get_preview_queue_counts()
     text_queue = get_text_queue_counts()
     metadata_queue = get_metadata_queue_counts()
     embedding_queue = get_embedding_queue_counts()
 
-    stuck = get_stuck_processing_counts()
-    top_errors = get_top_pipeline_errors()
+    mount_health = get_mount_health()
+    missing_ok_previews = count_missing_ok_previews()
+    preview_error_buckets = get_preview_error_buckets(limit=8)
+    unsupported_ext_buckets = get_unsupported_ext_buckets(limit=8)
+    stuck_processing = get_stuck_processing_counts(timeout_minutes=30)
+    top_errors = get_top_pipeline_errors(limit=10)
 
-    preview_drift_count = get_preview_drift_count()
-    preview_drift = get_preview_drift(limit=5)
+    metric_task_names = [
+        "rebuild_archive_stats_task",
+        "rebuild_queue_health_snapshot_task",
+        "rebuild_folder_health_snapshot_task",
+        "queue_missing_previews_task",
+        "queue_missing_text_task",
+        "queue_missing_embeddings_task",
+        "queue_missing_metadata_task",
+        "reset_stale_processing_task",
+    ]
+    recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
+    latest_metric_by_task = {}
+    for row in recent_metrics:
+        latest_metric_by_task.setdefault(row.task_name, row)
 
-    recent_queue_logs = get_recent_tasklog_rows(
-        ["scan", "preview", "text", "metadata", "embedding", "preview_repair"],
-        limit=30,
-    )
-
-    ctx = {
-        "total_files": total_files,
-        "indexed": indexed,
-        "graph_rows": graph_rows,
-        "recent_previewed": recent_previewed,
-        "recent_text": recent_text,
-        "recent_metadata": recent_metadata,
-        "recent_embedding": recent_embedding,
-        "text_quality": text_quality,
-        "exact_duplicate_groups": exact_duplicate_groups,
-        "exact_duplicate_file_count": exact_duplicate_file_count,
-        "mount_health": mount_health,
-        "missing_ok_previews": missing_ok_previews,
-        "preview_error_buckets": preview_error_buckets,
-        "unsupported_ext_buckets": unsupported_ext_buckets,
-        "scan_queue": scan_queue,
-        "preview_queue": preview_queue,
-        "text_queue": text_queue,
-        "metadata_queue": metadata_queue,
-        "embedding_queue": embedding_queue,
-        "recent_queue_logs": recent_queue_logs,
-        "stuck_processing": stuck,
-        "top_errors": top_errors,
-        "preview_drift_count": preview_drift_count,
-        "preview_drift": preview_drift,
-        "worst_folders": worst_folders,
+    task_runtime_rows = []
+    worst_folders = list(FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10])
+    runtime_labels = {
+        "rebuild_archive_stats_task": "Archive stats rebuild",
+        "rebuild_queue_health_snapshot_task": "Queue snapshot rebuild",
+        "rebuild_folder_health_snapshot_task": "Folder health rebuild",
+        "queue_missing_previews_task": "Preview queue batch",
+        "queue_missing_text_task": "Text queue batch",
+        "queue_missing_embeddings_task": "Embedding queue batch",
+        "queue_missing_metadata_task": "Metadata queue batch",
+        "reset_stale_processing_task": "Recovery reset",
     }
-    return render(request, "indexer/ui_home.html", ctx)
+    for task_name, label in runtime_labels.items():
+        metric = latest_metric_by_task.get(task_name)
+        task_runtime_rows.append(
+            {
+                "label": label,
+                "task_name": task_name,
+                "status": getattr(metric, "status", "—") if metric else "—",
+                "duration_ms": getattr(metric, "duration_ms", None) if metric else None,
+                "finished_at": getattr(metric, "finished_at", None) if metric else None,
+            }
+        )
+
+    return render(
+        request,
+        "indexer/ui_home.html",
+        {
+            "total_files": total_files,
+            "indexed": indexed,
+            "exact_duplicate_groups": exact_duplicate_groups,
+            "exact_duplicate_file_count": exact_duplicate_file_count,
+            "text_quality": text_quality,
+            "graph_rows": graph_rows,
+            "mount_health": mount_health,
+            "missing_ok_previews": missing_ok_previews,
+            "preview_error_buckets": preview_error_buckets,
+            "unsupported_ext_buckets": unsupported_ext_buckets,
+            "scan_queue": scan_queue,
+            "preview_queue": preview_queue,
+            "text_queue": text_queue,
+            "metadata_queue": metadata_queue,
+            "embedding_queue": embedding_queue,
+            "stuck_processing": stuck_processing,
+            "top_errors": top_errors,
+            "task_runtime_rows": task_runtime_rows,
+            "worst_folders": worst_folders,
+            "stats_updated_at": getattr(stats, "updated_at", None),
+            "queue_snapshot_updated_at": getattr(queue_snapshot, "updated_at", None),
+        },
+    )
 
 
 @login_required

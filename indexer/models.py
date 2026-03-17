@@ -65,11 +65,14 @@ class IndexerSettings(models.Model):
         obj, _ = cls.objects.get_or_create(id=1)
         return obj
 
+
 class PreviewStatus(models.TextChoices):
     PENDING = "pending", "Pending"
+    PROCESSING = "processing", "Processing"
     OK = "ok", "OK"
     FAILED = "failed", "Failed"
     UNSUPPORTED = "unsupported", "Unsupported"
+
 
 class ProcessingStatus(models.TextChoices):
     PENDING = "pending", "Pending"
@@ -228,8 +231,6 @@ class Image(models.Model):
         return self.filename
 
 
-
-
 class ScanDir(models.Model):
     """
     Directory queue for incremental scanning.
@@ -299,6 +300,7 @@ class AssetLink(models.Model):
     def __str__(self):
         return f"{self.parent_id} -> {self.linked_path}"
 
+
 class Folder(models.Model):
     root = models.ForeignKey(
         "AccessRoot",
@@ -350,33 +352,165 @@ class Folder(models.Model):
     def __str__(self):
         return self.rel_path or self.name or self.path
 
+
 class ArchiveStats(models.Model):
-    scope = models.CharField(max_length=50, unique=True, default="global")
+    scope = models.CharField(max_length=32, unique=True, default="global")
 
     total_files = models.BigIntegerField(default=0)
     indexed_files = models.BigIntegerField(default=0)
 
+    # Preview
     preview_ok = models.BigIntegerField(default=0)
     preview_pending = models.BigIntegerField(default=0)
+    preview_processing = models.BigIntegerField(default=0)
     preview_failed = models.BigIntegerField(default=0)
     preview_unsupported = models.BigIntegerField(default=0)
 
+    # Text pipeline
     text_ok = models.BigIntegerField(default=0)
     text_pending = models.BigIntegerField(default=0)
+    text_processing = models.BigIntegerField(default=0)
     text_failed = models.BigIntegerField(default=0)
     text_skipped = models.BigIntegerField(default=0)
 
+    # Text source / quality
+    text_native_pdf = models.BigIntegerField(default=0)
+    text_ocr_image = models.BigIntegerField(default=0)
+    text_high_conf = models.BigIntegerField(default=0)
+    text_mid_conf = models.BigIntegerField(default=0)
+    text_low_conf = models.BigIntegerField(default=0)
+
+    # Metadata
     metadata_ok = models.BigIntegerField(default=0)
     metadata_pending = models.BigIntegerField(default=0)
+    metadata_processing = models.BigIntegerField(default=0)
     metadata_failed = models.BigIntegerField(default=0)
     metadata_skipped = models.BigIntegerField(default=0)
 
+    # Embedding
     embedding_ok = models.BigIntegerField(default=0)
     embedding_pending = models.BigIntegerField(default=0)
+    embedding_processing = models.BigIntegerField(default=0)
     embedding_failed = models.BigIntegerField(default=0)
     embedding_skipped = models.BigIntegerField(default=0)
 
+    # Duplicates
+    duplicate_groups = models.BigIntegerField(default=0)
+    duplicate_items = models.BigIntegerField(default=0)
+
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["scope"]),
+        ]
 
     def __str__(self):
         return self.scope
+
+
+class FolderHealthSnapshot(models.Model):
+    scope = models.CharField(max_length=32, default="global", db_index=True)
+    root_id = models.IntegerField()
+    folder = models.TextField()
+
+    file_count = models.IntegerField()
+
+    preview_failed = models.IntegerField(default=0)
+    text_failed = models.IntegerField(default=0)
+    metadata_failed = models.IntegerField(default=0)
+
+    missing_preview = models.IntegerField(default=0)
+    duplicate_count = models.IntegerField(default=0)
+
+    health_score = models.FloatField(default=0)
+    rank = models.IntegerField()
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["scope", "rank"]),
+        ]
+
+    def __str__(self):
+        return f"{self.scope} :: {self.folder}"
+
+
+class QueueHealthSnapshot(models.Model):
+    scope = models.CharField(max_length=50, unique=True, default="global")
+
+    scan_pending_dirs = models.BigIntegerField(default=0)
+    scan_retrying_dirs = models.BigIntegerField(default=0)
+    scan_done_dirs = models.BigIntegerField(default=0)
+
+    preview_pending = models.BigIntegerField(default=0)
+    preview_processing = models.BigIntegerField(default=0)
+    preview_ok = models.BigIntegerField(default=0)
+    preview_failed = models.BigIntegerField(default=0)
+    preview_unsupported = models.BigIntegerField(default=0)
+
+    text_pending = models.BigIntegerField(default=0)
+    text_processing = models.BigIntegerField(default=0)
+    text_ok = models.BigIntegerField(default=0)
+    text_failed = models.BigIntegerField(default=0)
+    text_skipped = models.BigIntegerField(default=0)
+    text_unsupported = models.BigIntegerField(default=0)
+
+    metadata_pending = models.BigIntegerField(default=0)
+    metadata_processing = models.BigIntegerField(default=0)
+    metadata_ok = models.BigIntegerField(default=0)
+    metadata_failed = models.BigIntegerField(default=0)
+    metadata_skipped = models.BigIntegerField(default=0)
+    metadata_unsupported = models.BigIntegerField(default=0)
+
+    embedding_pending = models.BigIntegerField(default=0)
+    embedding_processing = models.BigIntegerField(default=0)
+    embedding_ok = models.BigIntegerField(default=0)
+    embedding_failed = models.BigIntegerField(default=0)
+    embedding_skipped = models.BigIntegerField(default=0)
+    embedding_unsupported = models.BigIntegerField(default=0)
+    embedding_indexed = models.BigIntegerField(default=0)
+
+    stuck_preview = models.BigIntegerField(default=0)
+    stuck_text = models.BigIntegerField(default=0)
+    stuck_metadata = models.BigIntegerField(default=0)
+    stuck_embedding = models.BigIntegerField(default=0)
+
+    oldest_preview_pending_at = models.DateTimeField(null=True, blank=True)
+    oldest_preview_processing_at = models.DateTimeField(null=True, blank=True)
+    oldest_text_pending_at = models.DateTimeField(null=True, blank=True)
+    oldest_text_processing_at = models.DateTimeField(null=True, blank=True)
+    oldest_metadata_pending_at = models.DateTimeField(null=True, blank=True)
+    oldest_metadata_processing_at = models.DateTimeField(null=True, blank=True)
+    oldest_embedding_pending_at = models.DateTimeField(null=True, blank=True)
+    oldest_embedding_processing_at = models.DateTimeField(null=True, blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["scope"])]
+
+    def __str__(self):
+        return self.scope
+
+
+class TaskRunMetric(models.Model):
+    task_name = models.CharField(max_length=100, db_index=True)
+    scope = models.CharField(max_length=50, default="global", db_index=True)
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField()
+    duration_ms = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, default="ok", db_index=True)
+    details_json = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-finished_at"]
+        indexes = [
+            models.Index(fields=["task_name", "scope", "-finished_at"]),
+            models.Index(fields=["status", "-finished_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.task_name} [{self.scope}] {self.status} {self.duration_ms}ms"

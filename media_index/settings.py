@@ -158,7 +158,7 @@ CELERY_BEAT_SCHEDULE = {
     "queue-previews-every-30-sec": {
         "task": "indexer.tasks_preview.queue_missing_previews_task",
         "schedule": 30.0,
-        "args": (20, 2),
+        "args": (128, 16),
         "options": {"queue": "preview", "routing_key": "preview"},
     },
     "queue-text-every-60-sec": {
@@ -170,13 +170,13 @@ CELERY_BEAT_SCHEDULE = {
     "queue-embeddings-every-60-sec": {
         "task": "indexer.tasks_embedding.queue_missing_embeddings_task",
         "schedule": 60.0,
-        "args": (500, 25),
+        "args": (256, 16),
         "options": {"queue": "embedding"},
     },
     "queue-metadata-every-120-sec": {
         "task": "indexer.tasks_metadata.queue_missing_metadata_task",
         "schedule": 120.0,
-        "args": (2000,),
+        "args": (512, 32),
         "options": {"queue": "metadata"},
     },
     "queue-dedupe-every-90-sec": {
@@ -195,14 +195,26 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 1800.0,
         "args": (500,),
     },
-    "reset-stuck-processing-every-10-min": {
-        "task": "indexer.tasks_maintenance.reset_stuck_processing_task",
+    "reset-stuck-preview-every-10-min": {
+        "task": "indexer.tasks_recovery.reset_stale_preview_processing_task",
         "schedule": 600.0,
-        "args": (30,),
+        "args": (45,),
+        "options": {"queue": "preview"},
+    },
+    "reset-stuck-processing-every-10-min": {
+        "task": "indexer.tasks_recovery.reset_stale_processing_task",
+        "schedule": 600.0,
+        "args": (45,),
+        "options": {"queue": "metadata"},
     },
     "rebuild_archive_stats": {
         "task": "indexer.tasks_stats.rebuild_archive_stats_task",
-        "schedule": 300.0,  # every 5 minutes
+        "schedule": 300.0,
+    },
+    "rebuild_queue_health_snapshot": {
+        "task": "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task",
+        "schedule": 300.0,
+        "args": (45,),
     },
 }
 
@@ -210,12 +222,15 @@ CELERY_TASK_ROUTES = {
     "indexer.tasks.scan_task": {"queue": "scan"},
     "indexer.tasks_preview.queue_missing_previews_task": {"queue": "preview"},
     "indexer.tasks_preview.process_preview_task": {"queue": "preview"},
+    "indexer.tasks_preview.process_preview_batch_task": {"queue": "preview"},
     "indexer.tasks_text.queue_missing_text_task": {"queue": "text"},
     "indexer.tasks_text.extract_text_task": {"queue": "text"},
     "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "embedding"},
     "indexer.tasks_embedding.embed_image_task": {"queue": "embedding"},
+    "indexer.tasks_embedding.process_embedding_batch_task": {"queue": "embedding"},
     "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "metadata"},
     "indexer.tasks_metadata.extract_metadata_task": {"queue": "metadata"},
+    "indexer.tasks_metadata.process_metadata_batch_task": {"queue": "metadata"},
     "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "metadata"},
     "indexer.tasks_dedupe.dedupe_image_task": {"queue": "metadata"},
     "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},

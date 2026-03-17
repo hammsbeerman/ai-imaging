@@ -1,10 +1,20 @@
 from celery import shared_task
+from django.db import close_old_connections
 from django.db.models import Q
 from django.utils import timezone
 
+from indexer.duplicate_utils import compute_phash, file_sha256
 from indexer.models import Image
-from indexer.duplicate_utils import file_sha256, compute_phash
 from indexer.previews import abs_preview_path
+
+
+QUEUE_PICK_LIMIT = 500
+WORKER_BATCH_SIZE = 50
+
+
+def _chunked(seq, size):
+    for i in range(0, len(seq), size):
+        yield seq[i:i + size]
 
 
 def _dedupe_one(img: Image) -> None:
@@ -16,11 +26,7 @@ def _dedupe_one(img: Image) -> None:
 
     if hasattr(img, "phash") and not img.phash:
         try:
-            source_path = (
-                abs_preview_path(img.preview_path)
-                or abs_preview_path(img.thumb_path)
-                or img.path
-            )
+            source_path = abs_preview_path(img.preview_path) or abs_preview_path(img.thumb_path) or img.path
             img.phash = compute_phash(source_path)
             changed.append("phash")
         except Exception:
@@ -50,29 +56,44 @@ def dedupe_image_task(image_id: str):
 
 
 @shared_task
-def queue_missing_dedupe_task(limit: int = 500):
+def dedupe_batch_task(image_ids):
+    close_old_connections()
+    rows = Image.objects.filter(id__in=image_ids).only(
+        "id", "path", "preview_path", "thumb_path", "sha256", "phash",
+        "duplicate_group", "duplicate_checked_at",
+    )
+    by_id = {str(img.id): img for img in rows}
+
+    ok = 0
+    missing = 0
+    for image_id in image_ids:
+        img = by_id.get(str(image_id))
+        if not img:
+            missing += 1
+            continue
+        _dedupe_one(img)
+        ok += 1
+
+    return {"selected": len(image_ids), "ok": ok, "missing": missing}
+
+
+@shared_task
+def queue_missing_dedupe_task(limit: int = QUEUE_PICK_LIMIT, chunk_size: int = WORKER_BATCH_SIZE):
+    close_old_connections()
     qs = Image.objects.filter(skip_index=False)
 
-    if not hasattr(Image, "sha256"):
-        return {"queued": 0, "reason": "sha256 field missing"}
-
     filters = Q(sha256="")
-
     if hasattr(Image, "phash"):
         filters |= Q(phash="")
-
     if hasattr(Image, "duplicate_group"):
         filters |= Q(duplicate_group="")
-
     if hasattr(Image, "duplicate_checked_at"):
         filters |= Q(duplicate_checked_at__isnull=True)
 
-    ids = list(
-        qs.filter(filters)
-        .values_list("id", flat=True)[:limit]
-    )
+    ids = list(qs.filter(filters).order_by("id").values_list("id", flat=True)[:limit])
+    submitted = 0
+    for batch_ids in _chunked([str(x) for x in ids], chunk_size):
+        dedupe_batch_task.delay(batch_ids)
+        submitted += 1
 
-    for image_id in ids:
-        dedupe_image_task.delay(str(image_id))
-
-    return {"queued": len(ids)}
+    return {"queued": len(ids), "submitted_batches": submitted}
