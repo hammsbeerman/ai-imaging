@@ -386,19 +386,66 @@ def ui_home(request):
         },
     ]
 
-    queue_snapshot = QueueHealthSnapshot.objects.filter(scope="global").first()
-    scan_queue = get_scan_queue_counts()
-    preview_queue = get_preview_queue_counts()
-    text_queue = get_text_queue_counts()
-    metadata_queue = get_metadata_queue_counts()
-    embedding_queue = get_embedding_queue_counts()
+    queue_snapshot = None
+    try:
+        queue_snapshot = QueueHealthSnapshot.objects.filter(scope="global").first()
+    except Exception:
+        queue_snapshot = None
 
-    mount_health = get_mount_health()
-    missing_ok_previews = count_missing_ok_previews()
-    preview_error_buckets = get_preview_error_buckets(limit=8)
-    unsupported_ext_buckets = get_unsupported_ext_buckets(limit=8)
-    stuck_processing = get_stuck_processing_counts(timeout_minutes=30)
-    top_errors = get_top_pipeline_errors(limit=10)
+    try:
+        scan_queue = get_scan_queue_counts()
+    except Exception:
+        scan_queue = {}
+
+    try:
+        preview_queue = get_preview_queue_counts()
+    except Exception:
+        preview_queue = {}
+
+    try:
+        text_queue = get_text_queue_counts()
+    except Exception:
+        text_queue = {}
+
+    try:
+        metadata_queue = get_metadata_queue_counts()
+    except Exception:
+        metadata_queue = {}
+
+    try:
+        embedding_queue = get_embedding_queue_counts()
+    except Exception:
+        embedding_queue = {}
+
+    try:
+        mount_health = get_mount_health()
+    except Exception:
+        mount_health = {}
+
+    try:
+        missing_ok_previews = count_missing_ok_previews()
+    except Exception:
+        missing_ok_previews = 0
+
+    try:
+        preview_error_buckets = get_preview_error_buckets(limit=8)
+    except Exception:
+        preview_error_buckets = []
+
+    try:
+        unsupported_ext_buckets = get_unsupported_ext_buckets(limit=8)
+    except Exception:
+        unsupported_ext_buckets = []
+
+    try:
+        stuck_processing = get_stuck_processing_counts(timeout_minutes=30)
+    except Exception:
+        stuck_processing = {}
+
+    try:
+        top_errors = get_top_pipeline_errors(limit=10)
+    except Exception:
+        top_errors = []
 
     metric_task_names = [
         "rebuild_archive_stats_task",
@@ -410,13 +457,24 @@ def ui_home(request):
         "queue_missing_metadata_task",
         "reset_stale_processing_task",
     ]
-    recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
+
+    try:
+        recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
+    except Exception:
+        recent_metrics = []
+
     latest_metric_by_task = {}
     for row in recent_metrics:
         latest_metric_by_task.setdefault(row.task_name, row)
 
+    try:
+        worst_folders = list(
+            FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10]
+        )
+    except Exception:
+        worst_folders = []
+
     task_runtime_rows = []
-    worst_folders = list(FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10])
     runtime_labels = {
         "rebuild_archive_stats_task": "Archive stats rebuild",
         "rebuild_queue_health_snapshot_task": "Queue snapshot rebuild",
@@ -427,6 +485,7 @@ def ui_home(request):
         "queue_missing_metadata_task": "Metadata queue batch",
         "reset_stale_processing_task": "Recovery reset",
     }
+
     for task_name, label in runtime_labels.items():
         metric = latest_metric_by_task.get(task_name)
         task_runtime_rows.append(
@@ -1704,7 +1763,7 @@ def login_view(request):
 
     return render(
         request,
-        "registration/login.html",
+        "indexer/login.html",
         {
             "next": next_url,
         },
