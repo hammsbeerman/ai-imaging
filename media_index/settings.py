@@ -126,6 +126,10 @@ TIME_ZONE = os.getenv("TIME_ZONE", "America/Chicago")
 USE_I18N = True
 USE_TZ = True
 
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/app/"
+LOGOUT_REDIRECT_URL = "/"
+
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"

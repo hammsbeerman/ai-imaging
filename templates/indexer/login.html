@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Login - AI Image Catalog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <style>
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        radial-gradient(circle at top, rgba(56, 189, 248, .16), transparent 28%),
+        linear-gradient(180deg, #0b1220 0%, #111827 50%, #0f172a 100%);
+      color: #e5e7eb;
+    }
+
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 440px;
+      background: rgba(17, 24, 39, .9);
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 1.25rem;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, .35);
+      padding: 2rem;
+    }
+
+    .login-muted {
+      color: #9ca3af;
+    }
+
+    .form-control,
+    .form-check-input {
+      background: #0f172a;
+      color: #e5e7eb;
+      border-color: #334155;
+    }
+
+    .form-control:focus {
+      background: #0f172a;
+      color: #e5e7eb;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 .2rem rgba(56, 189, 248, .18);
+    }
+
+    .form-control::placeholder {
+      color: #94a3b8;
+    }
+
+    .back-link {
+      color: #cbd5e1;
+      text-decoration: none;
+    }
+
+    .back-link:hover {
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="mb-4 text-center">
+        <h1 class="h3 mb-2">AI Image Catalog</h1>
+        <div class="login-muted">Sign in to continue</div>
+      </div>
+
+      {% if messages %}
+        <div class="mb-3">
+          {% for message in messages %}
+            <div class="alert alert-danger py-2 mb-2">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next|default:'/ui/' }}">
+
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input
+            type="text"
+            name="username"
+            class="form-control"
+            autocomplete="username"
+            required
+          >
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input
+            type="password"
+            name="password"
+            class="form-control"
+            autocomplete="current-password"
+            required
+          >
+        </div>
+
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="remember_me" id="remember_me">
+          <label class="form-check-label" for="remember_me">
+            Remember me
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-info w-100">Login</button>
+      </form>
+
+      <div class="text-center mt-3">
+        <a href="/" class="back-link">← Back to landing page</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

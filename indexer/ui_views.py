@@ -1,13 +1,14 @@
 import os
 from pathlib import Path
-
+from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.db import models
 from django.db.models import Q, Count, Min, Max, Case, When, IntegerField
 from django.core.paginator import Paginator
 from django.http import Http404, HttpResponseRedirect
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from urllib.parse import quote
@@ -1670,3 +1671,46 @@ def ui_requeue_stage_bulk(request, stage):
         messages.error(request, f"Unknown stage: {stage}")
 
     return redirect("ui_home_alt")
+
+def landing(request):
+    if request.user.is_authenticated:
+        return redirect("ui_home")
+    return render(request, "indexer/landing.html")
+
+
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect("ui_home")
+
+    next_url = request.GET.get("next") or request.POST.get("next") or "/ui/"
+
+    if request.method == "POST":
+        username = (request.POST.get("username") or "").strip()
+        password = request.POST.get("password") or ""
+        remember_me = request.POST.get("remember_me") == "on"
+
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+
+            if remember_me:
+                request.session.set_expiry(60 * 60 * 24 * 30)  # 30 days
+            else:
+                request.session.set_expiry(0)  # browser session only
+
+            return redirect(next_url)
+
+        messages.error(request, "Invalid username or password.")
+
+    return render(
+        request,
+        "registration/login.html",
+        {
+            "next": next_url,
+        },
+    )
+
+
+def logout_view(request):
+    logout(request)
+    return redirect("landing")

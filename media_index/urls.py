@@ -10,6 +10,9 @@ from indexer.api_image import api_image_detail
 from indexer.api_search import api_search
 from indexer.api_similar import similar
 from indexer.ui_views import (
+    landing,
+    login_view,
+    logout_view,
     ui_browse_folder,
     ui_browse_root,
     ui_cluster_detail,
@@ -36,8 +39,14 @@ from indexer.ui_views import (
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", ui_home, name="ui_home"),
-    path("ui/", ui_home, name="ui_home_alt"),
+
+    # Public
+    path("", landing, name="landing"),
+    path("login/", login_view, name="login"),
+    path("logout/", logout_view, name="logout"),
+
+    # UI
+    path("ui/", ui_home, name="ui_home"),
     path("ui/search/", ui_search, name="ui_search"),
     path("ui/item/<uuid:image_id>/", ui_item, name="ui_item"),
     path("ui/similar/<uuid:image_id>/", ui_similar, name="ui_similar"),
@@ -59,6 +68,8 @@ urlpatterns = [
     path("ui/clusters/<str:cluster_id>/", ui_cluster_detail, name="ui_cluster_detail"),
     path("ui/health/folders/", ui_folder_health, name="ui_folder_health"),
     path("ui/health/folders/<int:folder_id>/<str:issue_code>/", ui_folder_issue_detail, name="ui_folder_issue_detail"),
+
+    # API
     path("api/health/summary/", api_health_summary, name="api_health_summary"),
     path("api/search/", api_search, name="api_search"),
     path("api/image/<uuid:image_id>/", api_image_detail, name="api_image_detail"),
