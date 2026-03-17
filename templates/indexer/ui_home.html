@@ -208,6 +208,81 @@
     </div>
   </div>
 </div>
+<div class="page-card p-3 mb-3">
+  <h2 class="h5 mb-3">Queue Pressure</h2>
+
+  <div class="row text-center">
+    <div class="col">
+      <div class="small text-muted">Scan</div>
+      <div class="fw-semibold">{{ queue_summary.scan }}</div>
+    </div>
+    <div class="col">
+      <div class="small text-muted">Preview</div>
+      <div class="fw-semibold">{{ queue_summary.preview }}</div>
+    </div>
+    <div class="col">
+      <div class="small text-muted">Text</div>
+      <div class="fw-semibold">{{ queue_summary.text }}</div>
+    </div>
+    <div class="col">
+      <div class="small text-muted">Metadata</div>
+      <div class="fw-semibold">{{ queue_summary.metadata }}</div>
+    </div>
+    <div class="col">
+      <div class="small text-muted">Embedding</div>
+      <div class="fw-semibold">{{ queue_summary.embedding }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="page-card p-3 mb-3">
+  <h2 class="h5 mb-3">Worst Folders</h2>
+
+  <table class="table table-sm">
+    <thead>
+      <tr>
+        <th>Folder</th>
+        <th>Score</th>
+        <th>Files</th>
+        <th>Issues</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in worst_folders %}
+      <tr>
+        <td class="mono">{{ f.folder|truncatechars:50 }}</td>
+        <td>{{ f.health_score|floatformat:1 }}</td>
+        <td>{{ f.file_count }}</td>
+        <td>
+          P: {{ f.preview_failed }} /
+          M: {{ f.metadata_failed }} /
+          T: {{ f.text_failed }}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-muted">No data yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="page-card p-3 mb-3">
+  <h2 class="h5 mb-3">System Signals</h2>
+
+  <div class="d-flex gap-4">
+    <div>
+      <div class="small text-muted">Preview Mount</div>
+      <div class="{% if system_signals.mount_ok %}text-success{% else %}text-danger{% endif %}">
+        {% if system_signals.mount_ok %}Healthy{% else %}Problem{% endif %}
+      </div>
+    </div>
+
+    <div>
+      <div class="small text-muted">Missing Previews</div>
+      <div>{{ system_signals.missing_previews }}</div>
+    </div>
+  </div>
+</div>
 
 <div class="row g-3 mb-4">
   <div class="col-lg-6">

@@ -251,6 +251,12 @@ def ui_collections(request):
 
 @login_required
 def ui_home(request):
+    cache_key = "ui_home_v1"
+
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
     stats = ArchiveStats.objects.filter(scope="global").first()
     if not stats:
         stats = ArchiveStats(
@@ -383,6 +389,14 @@ def ui_home(request):
 
     queue_snapshot = QueueHealthSnapshot.objects.filter(scope="global").first()
 
+    queue_summary = {
+        "scan": getattr(queue_snapshot, "scan_pending", 0),
+        "preview": getattr(queue_snapshot, "preview_pending", 0),
+        "text": getattr(queue_snapshot, "text_pending", 0),
+        "metadata": getattr(queue_snapshot, "metadata_pending", 0),
+        "embedding": getattr(queue_snapshot, "embedding_pending", 0),
+    }
+
     metric_task_names = [
         "rebuild_archive_stats_task",
         "rebuild_queue_health_snapshot_task",
@@ -401,6 +415,23 @@ def ui_home(request):
     worst_folders = list(
         FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10]
     )
+
+    # --- Mount health (FIXED)
+    try:
+        mount_health = get_mount_health()
+    except Exception:
+        mount_health = {
+            "path": "",
+            "exists": False,
+            "readable": False,
+            "writable": False,
+            "healthy": False,
+        }
+    
+    system_signals = {
+        "missing_previews": 0,  # hook later
+        "mount_ok": mount_health.get("healthy", False),
+    }
 
     runtime_labels = {
         "rebuild_archive_stats_task": "Archive stats rebuild",
@@ -435,12 +466,14 @@ def ui_home(request):
             "exact_duplicate_file_count": getattr(stats, "duplicate_items", 0) or 0,
             "text_quality": text_quality,
             "graph_rows": graph_rows,
-            "mount_health": {},
+            "mount_health": mount_health,
             "missing_ok_previews": 0,
             "preview_error_buckets": [],
+            "system_signals": system_signals,
             "unsupported_ext_buckets": [],
             "scan_queue": {},
             "preview_queue": {},
+            "queue_summary": queue_summary,
             "text_queue": {},
             "metadata_queue": {},
             "embedding_queue": {},
@@ -452,6 +485,10 @@ def ui_home(request):
             "queue_snapshot_updated_at": getattr(queue_snapshot, "updated_at", None),
         },
     )
+
+    cache.set(cache_key, response, 30)  # 30 seconds
+
+    return response
 
 
 @login_required
