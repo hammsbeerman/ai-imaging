@@ -200,6 +200,10 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 600.0,
         "args": (30,),
     },
+    "rebuild_archive_stats": {
+        "task": "indexer.tasks_stats.rebuild_archive_stats_task",
+        "schedule": 300.0,  # every 5 minutes
+    },
 }
 
 CELERY_TASK_ROUTES = {

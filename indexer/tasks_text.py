@@ -9,6 +9,8 @@ from django.utils import timezone
 
 from indexer.models import Image, ProcessingStatus, PreviewStatus
 from indexer.ocr_utils import ocr_image, looks_like_useful_text, clean_ocr_text
+from indexer.locks import acquire_lock, release_lock
+from indexer.tasklog import log
 from indexer.services.pipeline_logging import (
     log_stage_start,
     log_stage_ok,
@@ -203,10 +205,7 @@ def _text_one(img: Image) -> None:
     log_stage_skip("text", img, f"unsupported type {ext or 'unknown'}")
 
 
-@shared_task
-def extract_text_task(image_id: str):
-    close_old_connections()
-
+def _process_one_text_id(image_id: str) -> str:
     img = Image.objects.get(id=image_id)
 
     img.text_status = ProcessingStatus.PROCESSING
@@ -219,7 +218,7 @@ def extract_text_task(image_id: str):
 
     try:
         _text_one(img)
-        return {"ok": True, "id": image_id}
+        return "ok"
     except Exception as e:
         img.text_status = ProcessingStatus.FAILED
         img.text_error = str(e)[:2000]
@@ -231,22 +230,83 @@ def extract_text_task(image_id: str):
 
         img.save(update_fields=update_fields)
         log_stage_error("text", img, e)
-        return {"ok": False, "id": image_id, "error": str(e)}
+        return "failed"
 
 
 @shared_task
-def queue_missing_text_task(limit: int = 1000):
+def extract_text_task(image_id: str):
+    close_old_connections()
+    result = _process_one_text_id(str(image_id))
+    return {"status": result, "id": str(image_id)}
+
+
+@shared_task
+def process_text_batch_task(image_ids):
     close_old_connections()
 
-    ids = list(
-        Image.objects.filter(
-            skip_index=False,
-            text_status=ProcessingStatus.PENDING,
-            preview_status=PreviewStatus.OK,
-        ).values_list("id", flat=True)[:limit]
-    )
+    ok = 0
+    failed = 0
 
-    for image_id in ids:
-        extract_text_task.delay(str(image_id))
+    for image_id in image_ids:
+        result = _process_one_text_id(str(image_id))
+        if result == "ok":
+            ok += 1
+        else:
+            failed += 1
 
-    return {"queued": len(ids)}
+    return {
+        "selected": len(image_ids),
+        "ok": ok,
+        "failed": failed,
+    }
+
+
+@shared_task
+def queue_missing_text_task(batch_size: int = 500, chunk_size: int = 25):
+    close_old_connections()
+
+    lock_key = "lock:queue_missing_text_task"
+    token = acquire_lock(lock_key, ttl=120)
+    if not token:
+        log("text", "queue skipped (lock held)")
+        return
+
+    try:
+        ids = list(
+            Image.objects.filter(
+                skip_index=False,
+                text_status=ProcessingStatus.PENDING,
+                preview_status=PreviewStatus.OK,
+            ).values_list("id", flat=True)[:batch_size]
+        )
+
+        log("text", f"queue selected={len(ids)}")
+
+        total_ok = 0
+        total_failed = 0
+
+        for i in range(0, len(ids), chunk_size):
+            chunk = [str(x) for x in ids[i:i + chunk_size]]
+
+            ok = 0
+            failed = 0
+
+            for image_id in chunk:
+                result = _process_one_text_id(image_id)
+                if result == "ok":
+                    ok += 1
+                else:
+                    failed += 1
+
+            total_ok += ok
+            total_failed += failed
+
+            log("text", f"batch done selected={len(chunk)} ok={ok} failed={failed}")
+
+        return {
+            "selected": len(ids),
+            "ok": total_ok,
+            "failed": total_failed,
+        }
+    finally:
+        release_lock(lock_key, token)

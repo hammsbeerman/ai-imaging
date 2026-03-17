@@ -19,3 +19,4 @@ gunicorn.ctl
 
 celerybeat-schedule
 celerybeat-schedule.*
+

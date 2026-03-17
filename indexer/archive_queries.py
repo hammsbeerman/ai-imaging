@@ -94,7 +94,7 @@ def search_archive(query: str, *, folder_id: int | None = None, page: int = 1, p
         {"id": str(img.id), "filename": img.filename, "path": img.path, "image": img}
         for img in hydrated
     ], query, "hybrid")
-    reasons = {str(row["id"]): row.get("match_reasons", []) for row in reason_rows}
+    reasons = {str(row["id"]): row.get("match_labels", []) for row in reason_rows}
 
     payload = []
     for img in hydrated:
@@ -132,8 +132,8 @@ def image_detail_payload(image_id: str) -> dict[str, Any]:
 
 def image_similar_payload(image_id: str) -> dict[str, Any]:
     img = get_image_or_404(image_id)
-    near_ids = [str(row.get("id")) for row in find_near_duplicates(str(img.id), limit=24)]
-    cluster_ids = [str(row.get("id")) for row in get_visual_cluster(str(img.id), limit=24)]
+    near_ids = [str(row.get("point_id")) for row in find_near_duplicates(str(img.id), limit=24)]
+    cluster_ids = [str(row.get("point_id")) for row in get_visual_cluster(str(img.id), limit=24)]
     seen = {str(img.id)}
     similar = []
     for qset_ids, label in [(near_ids, "near_duplicate"), (cluster_ids, "cluster")]:

@@ -4,17 +4,17 @@ from celery import shared_task
 from django.db import close_old_connections
 from django.utils import timezone
 
-from indexer.models import Image, ProcessingStatus, PreviewStatus
 from indexer.clip_embedder import embed_image
-from indexer.qdrant import upsert_vector
-from indexer.previews import abs_preview_path
 from indexer.locks import acquire_lock, release_lock
+from indexer.models import Image, PreviewStatus, ProcessingStatus
+from indexer.previews import abs_preview_path
+from indexer.qdrant import upsert_vector
 from indexer.tasklog import log
 from indexer.services.pipeline_logging import (
-    log_stage_start,
+    log_stage_error,
     log_stage_ok,
     log_stage_skip,
-    log_stage_error,
+    log_stage_start,
 )
 
 
@@ -32,10 +32,149 @@ def _embedding_source_path(img: Image) -> str | None:
         return thumb_path
 
     ext = (img.file_ext or img.ext or os.path.splitext(img.filename)[1]).lower()
-    if ext in IMAGE_EXTENSIONS and os.path.exists(img.path):
+    if ext in IMAGE_EXTENSIONS and img.path and os.path.exists(img.path):
         return img.path
 
     return None
+
+
+def _mark_failed(img: Image, error: Exception | str):
+    img.embedding_status = ProcessingStatus.FAILED
+    img.embedding_error = str(error)[:2000]
+
+    update_fields = ["embedding_status", "embedding_error"]
+    if hasattr(img, "embedding_run_at"):
+        img.embedding_run_at = timezone.now()
+        update_fields.append("embedding_run_at")
+
+    img.save(update_fields=update_fields)
+
+
+def _mark_skipped(img: Image, reason: str):
+    img.embedding_status = ProcessingStatus.SKIPPED
+    img.embedding_error = reason
+
+    update_fields = ["embedding_status", "embedding_error"]
+    if hasattr(img, "embedding_run_at"):
+        img.embedding_run_at = timezone.now()
+        update_fields.append("embedding_run_at")
+
+    img.save(update_fields=update_fields)
+
+
+def _mark_processing(img: Image):
+    img.embedding_status = ProcessingStatus.PROCESSING
+    img.embedding_error = ""
+
+    update_fields = ["embedding_status", "embedding_error"]
+    if hasattr(img, "embedding_run_at"):
+        img.embedding_run_at = timezone.now()
+        update_fields.append("embedding_run_at")
+
+    img.save(update_fields=update_fields)
+
+
+def _mark_ok(img: Image):
+    img.embedding_status = ProcessingStatus.OK
+    img.embedding_error = ""
+    img.indexed = True
+
+    update_fields = ["embedding_status", "embedding_error", "indexed"]
+    if hasattr(img, "embedding_run_at"):
+        img.embedding_run_at = timezone.now()
+        update_fields.append("embedding_run_at")
+
+    img.save(update_fields=update_fields)
+
+
+def _embed_one(image_id: str):
+    img = Image.objects.get(id=image_id)
+
+    _mark_processing(img)
+
+    source_path = _embedding_source_path(img)
+    if not source_path:
+        _mark_skipped(img, "no usable raster source for embedding")
+        log_stage_skip("embedding", img, "no usable raster source")
+        return "skipped"
+
+    log_stage_start("embedding", img)
+
+    vec = embed_image(source_path)
+    if hasattr(vec, "tolist"):
+        vec = vec.tolist()
+
+    upsert_vector(
+        image_id=str(img.id),
+        vector=vec,
+        payload={
+            "path": img.path,
+            "filename": img.filename,
+            "root_id": img.root_id,
+            "file_ext": img.file_ext or img.ext or "",
+            "customer_name": img.customer_name or "",
+            "job_type": img.job_type or "",
+            "relative_dir": getattr(img, "relative_dir", "") or "",
+            "probable_job_number": getattr(img, "probable_job_number", "") or "",
+            "folder_id": img.folder_id,
+        },
+    )
+
+    _mark_ok(img)
+    log_stage_ok("embedding", img, f"source={os.path.basename(source_path)}")
+    return "ok"
+
+
+@shared_task
+def embed_image_task(image_id):
+    close_old_connections()
+
+    try:
+        result = _embed_one(str(image_id))
+        return {"status": result, "image_id": str(image_id)}
+    except Exception as e:
+        img = Image.objects.get(id=image_id)
+        _mark_failed(img, e)
+        log_stage_error("embedding", img, e)
+        return {"status": "failed", "image_id": str(image_id), "error": str(e)[:500]}
+
+
+@shared_task
+def process_embedding_batch_task(image_ids):
+    close_old_connections()
+
+    log("embedding", f"batch start selected={len(image_ids)}")
+
+    ok = 0
+    failed = 0
+    skipped = 0
+
+    for image_id in image_ids:
+        try:
+            result = _embed_one(str(image_id))
+            if result == "ok":
+                ok += 1
+            elif result == "skipped":
+                skipped += 1
+            else:
+                failed += 1
+        except Exception as e:
+            failed += 1
+            try:
+                img = Image.objects.get(id=image_id)
+                _mark_failed(img, e)
+                log_stage_error("embedding", img, e)
+            except Exception:
+                log("embedding", f"FAILED image_id={image_id} error={str(e)[:500]}", "ERROR")
+
+    log("embedding", f"batch done selected={len(image_ids)} ok={ok} skipped={skipped} failed={failed}")
+
+    return {
+        "selected": len(image_ids),
+        "ok": ok,
+        "skipped": skipped,
+        "failed": failed,
+    }
 
 
 @shared_task
@@ -50,13 +189,11 @@ def queue_missing_embeddings_task(batch_size=500, chunk_size=25):
 
     try:
         ids = list(
-            Image.objects
-            .filter(
-                embedding_status=ProcessingStatus.PENDING,
+            Image.objects.filter(
                 skip_index=False,
+                embedding_status=ProcessingStatus.PENDING,
                 preview_status=PreviewStatus.OK,
             )
-            .exclude(preview_path="")
             .values_list("id", flat=True)[:batch_size]
         )
 
@@ -88,13 +225,10 @@ def queue_missing_embeddings_task(batch_size=500, chunk_size=25):
                     failed += 1
                     try:
                         img = Image.objects.get(id=image_id)
-                        img.embedding_status = ProcessingStatus.FAILED
-                        img.embedding_error = str(e)[:2000]
-                        img.save(update_fields=["embedding_status", "embedding_error"])
+                        _mark_failed(img, e)
                         log_stage_error("embedding", img, e)
                     except Exception:
                         log("embedding", f"FAILED image_id={image_id} error={str(e)[:500]}", "ERROR")
-                    continue
 
             total_ok += ok
             total_failed += failed
@@ -111,125 +245,3 @@ def queue_missing_embeddings_task(batch_size=500, chunk_size=25):
 
     finally:
         release_lock(lock_key, token)
-
-
-@shared_task
-def process_embedding_batch_task(image_ids):
-    close_old_connections()
-
-    log("embedding", f"batch start selected={len(image_ids)}")
-
-    ok = 0
-    failed = 0
-    skipped = 0
-
-    for image_id in image_ids:
-        try:
-            result = _embed_one(str(image_id))
-            if result == "ok":
-                ok += 1
-            elif result == "skipped":
-                skipped += 1
-            else:
-                failed += 1
-        except Exception as e:
-            failed += 1
-            try:
-                img = Image.objects.get(id=image_id)
-                img.embedding_status = ProcessingStatus.FAILED
-                img.embedding_error = str(e)[:2000]
-                img.save(update_fields=["embedding_status", "embedding_error"])
-                log_stage_error("embedding", img, e)
-            except Exception:
-                log("embedding", f"FAILED image_id={image_id} error={str(e)[:500]}", "ERROR")
-            continue
-
-    log("embedding", f"batch done selected={len(image_ids)} ok={ok} skipped={skipped} failed={failed}")
-
-    return {
-        "selected": len(image_ids),
-        "ok": ok,
-        "skipped": skipped,
-        "failed": failed,
-    }
-
-
-@shared_task
-def embed_image_task(image_id):
-    close_old_connections()
-    try:
-        result = _embed_one(str(image_id))
-        return {"status": result, "image_id": str(image_id)}
-    except Exception as e:
-        img = Image.objects.get(id=image_id)
-
-        img.embedding_status = ProcessingStatus.FAILED
-        img.embedding_error = str(e)[:2000]
-
-        img.save(update_fields=[
-            "embedding_status",
-            "embedding_error",
-        ])
-
-        log_stage_error("embedding", img, e)
-
-        return {"ok": False, "id": image_id, "error": str(e)}
-
-
-def _embed_one(image_id):
-    img = Image.objects.get(id=image_id)
-
-    img.embedding_status = ProcessingStatus.PROCESSING
-    img.embedding_error = ""
-    update_fields = ["embedding_status", "embedding_error"]
-    if hasattr(img, "embedding_run_at"):
-        img.embedding_run_at = timezone.now()
-        update_fields.append("embedding_run_at")
-    img.save(update_fields=update_fields)
-
-    source_path = _embedding_source_path(img)
-
-    if not source_path:
-        img.embedding_status = ProcessingStatus.SKIPPED
-        img.embedding_error = "no usable raster source for embedding"
-        update_fields = ["embedding_status", "embedding_error"]
-        if hasattr(img, "embedding_run_at"):
-            img.embedding_run_at = timezone.now()
-            update_fields.append("embedding_run_at")
-        img.save(update_fields=update_fields)
-
-        log_stage_skip("embedding", img, "no usable raster source")
-        return "skipped"
-
-    log_stage_start("embedding", img)
-
-    vec = embed_image(source_path)
-    if hasattr(vec, "tolist"):
-        vec = vec.tolist()
-
-    upsert_vector(
-        image_id=str(img.id),
-        vector=vec,
-        payload={
-            "path": img.path,
-            "filename": img.filename,
-            "root_id": img.root_id,
-            "file_ext": img.file_ext or img.ext or "",
-            "customer_name": img.customer_name or "",
-            "job_type": img.job_type or "",
-            "relative_dir": getattr(img, "relative_dir", "") or "",
-            "probable_job_number": getattr(img, "probable_job_number", "") or "",
-        },
-    )
-
-    img.embedding_status = ProcessingStatus.OK
-    img.embedding_error = ""
-    img.indexed = True
-    update_fields = ["embedding_status", "embedding_error", "indexed"]
-    if hasattr(img, "embedding_run_at"):
-        img.embedding_run_at = timezone.now()
-        update_fields.append("embedding_run_at")
-    img.save(update_fields=update_fields)
-
-    log_stage_ok("embedding", img, f"source={os.path.basename(source_path)}")
-    return "ok"

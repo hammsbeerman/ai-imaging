@@ -60,7 +60,7 @@ def queue_missing_previews_task(batch_size=50, chunk_size=5):
         return
 
     try:
-        pending_ids = list(
+        ids = list(
             Image.objects
             .filter(
                 skip_index=False,
@@ -69,24 +69,7 @@ def queue_missing_previews_task(batch_size=50, chunk_size=5):
             .values_list("id", flat=True)[:batch_size]
         )
 
-        broken_ok_ids = list(
-            Image.objects
-            .filter(
-                skip_index=False,
-                preview_status=PreviewStatus.OK,
-            )
-            .exclude(preview_path="")
-            .values_list("id", flat=True)[:batch_size]
-        )
-
-        ids = []
-        seen = set()
-
-        for image_id in pending_ids + broken_ok_ids:
-            sid = str(image_id)
-            if sid not in seen:
-                ids.append(sid)
-                seen.add(sid)
+        ids = [str(x) for x in ids]
 
         log("preview", f"queue selected={len(ids)}")
 

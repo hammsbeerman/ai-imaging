@@ -92,16 +92,14 @@ class Image(models.Model):
 
     text = models.TextField(blank=True, null=True)
 
-    indexed = models.BooleanField(default=False, db_index=True,)
-    skip_index = models.BooleanField(default=False, db_index=True,)
+    indexed = models.BooleanField(default=False, db_index=True)
+    skip_index = models.BooleanField(default=False, db_index=True)
 
     root = models.ForeignKey(AccessRoot, null=True, blank=True, on_delete=models.SET_NULL)
 
     created = models.DateTimeField(auto_now_add=True)
 
-    # Add these fields to your existing Image model:
-    # ------------------------------------------------
-    file_ext = models.CharField(max_length=20, blank=True, default="", db_index=True,)
+    file_ext = models.CharField(max_length=20, blank=True, default="", db_index=True)
     mime_type = models.CharField(max_length=120, blank=True, default="")
     preview_path = models.TextField(blank=True, default="")
     thumb_path = models.TextField(blank=True, default="")
@@ -114,6 +112,7 @@ class Image(models.Model):
     preview_error = models.TextField(blank=True, default="")
     preview_source = models.CharField(max_length=50, blank=True, default="")
     preview_created_at = models.DateTimeField(null=True, blank=True)
+
     text_status = models.CharField(
         max_length=20,
         choices=ProcessingStatus.choices,
@@ -122,6 +121,7 @@ class Image(models.Model):
     )
     text_error = models.TextField(blank=True, default="")
     extracted_text = models.TextField(blank=True, default="")
+
     embedding_status = models.CharField(
         max_length=20,
         choices=ProcessingStatus.choices,
@@ -129,6 +129,7 @@ class Image(models.Model):
         db_index=True,
     )
     embedding_error = models.TextField(blank=True, default="")
+
     metadata_status = models.CharField(
         max_length=20,
         choices=ProcessingStatus.choices,
@@ -136,6 +137,7 @@ class Image(models.Model):
         db_index=True,
     )
     metadata_error = models.TextField(blank=True, default="")
+
     width = models.IntegerField(null=True, blank=True)
     height = models.IntegerField(null=True, blank=True)
     folder_tokens = models.TextField(blank=True, default="")
@@ -159,13 +161,11 @@ class Image(models.Model):
     dpi_x = models.FloatField(null=True, blank=True)
     dpi_y = models.FloatField(null=True, blank=True)
 
-    # stronger file identity / tracking
     file_size = models.BigIntegerField(null=True, blank=True)
     file_mtime = models.DateTimeField(null=True, blank=True)
     file_ctime = models.DateTimeField(null=True, blank=True)
     sha256 = models.CharField(max_length=64, blank=True, default="", db_index=True)
 
-    # stronger OCR / text tracking
     extracted_text_clean = models.TextField(blank=True, default="")
     text_source = models.CharField(max_length=50, blank=True, default="", db_index=True)
     text_engine = models.CharField(max_length=50, blank=True, default="")
@@ -174,7 +174,6 @@ class Image(models.Model):
     text_language = models.CharField(max_length=20, blank=True, default="")
     text_run_at = models.DateTimeField(null=True, blank=True)
 
-    # richer metadata tracking
     metadata_run_at = models.DateTimeField(null=True, blank=True)
     aspect_ratio = models.FloatField(null=True, blank=True)
     orientation = models.CharField(max_length=20, blank=True, default="", db_index=True)
@@ -182,19 +181,15 @@ class Image(models.Model):
     bit_depth = models.IntegerField(null=True, blank=True)
     page_count = models.IntegerField(null=True, blank=True)
 
-    # keep captured_at if you want, but also add a more explicit EXIF field
     exif_date_taken = models.DateTimeField(null=True, blank=True)
 
-    # path/business parsing
     project_name = models.CharField(max_length=255, blank=True, default="")
     probable_job_number = models.CharField(max_length=100, blank=True, default="", db_index=True)
     relative_dir = models.TextField(blank=True, default="")
     folder_depth = models.IntegerField(null=True, blank=True)
 
-    # stage timing
     embedding_run_at = models.DateTimeField(null=True, blank=True)
 
-    # duplicate / near-duplicate / clustering
     phash = models.CharField(max_length=32, blank=True, default="", db_index=True)
     duplicate_group = models.CharField(max_length=64, blank=True, default="", db_index=True)
     is_primary_duplicate = models.BooleanField(default=False, db_index=True)
@@ -208,7 +203,26 @@ class Image(models.Model):
     near_duplicate_count = models.IntegerField(default=0)
     similar_image_count = models.IntegerField(default=0)
 
-    folder = models.ForeignKey("Folder", null=True, blank=True, on_delete=models.SET_NULL, related_name="images")
+    folder = models.ForeignKey(
+        "Folder",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="images",
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["skip_index", "preview_status", "id"], name="img_prev_q_idx"),
+            models.Index(fields=["skip_index", "text_status", "preview_status", "id"], name="img_text_q_idx"),
+            models.Index(fields=["skip_index", "embedding_status", "preview_status", "id"], name="img_embed_q_idx"),
+            models.Index(fields=["skip_index", "metadata_status", "id"], name="img_meta_q_idx"),
+            models.Index(fields=["indexed", "skip_index", "id"], name="img_index_q_idx"),
+            models.Index(fields=["root", "customer_name"], name="img_root_cust_idx"),
+            models.Index(fields=["root", "probable_job_number"], name="img_root_job_idx"),
+            models.Index(fields=["root", "folder", "id"], name="img_root_folder_idx"),
+            models.Index(fields=["duplicate_group", "is_primary_duplicate"], name="img_dupe_grp_idx"),
+        ]
 
     def __str__(self):
         return self.filename
@@ -222,19 +236,19 @@ class ScanDir(models.Model):
     Each scan_task run processes a small batch of ScanDir rows.
     """
     path = models.CharField(max_length=1500, unique=True, db_index=True)
-
     done = models.BooleanField(default=False, db_index=True)
 
-    # Backoff / retry control
     attempts = models.IntegerField(default=0)
     retry_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     last_error = models.TextField(blank=True, null=True)
-
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["done", "retry_at", "updated"]
+        indexes = [
+            models.Index(fields=["done", "retry_at", "updated"], name="scandir_queue_idx"),
+        ]
 
     def __str__(self):
         return self.path
@@ -242,8 +256,8 @@ class ScanDir(models.Model):
 
 class TaskLog(models.Model):
     created = models.DateTimeField(default=timezone.now, db_index=True)
-    task = models.CharField(max_length=50, db_index=True)   # scan / index / enrich
-    level = models.CharField(max_length=10, default="INFO") # INFO/WARN/ERROR
+    task = models.CharField(max_length=50, db_index=True)
+    level = models.CharField(max_length=10, default="INFO")
     message = models.TextField()
 
     class Meta:
@@ -251,6 +265,7 @@ class TaskLog(models.Model):
 
     def __str__(self):
         return f"{self.created} [{self.task}] {self.level}: {self.message[:60]}"
+
 
 class AssetLink(models.Model):
     parent = models.ForeignKey(
@@ -334,3 +349,34 @@ class Folder(models.Model):
 
     def __str__(self):
         return self.rel_path or self.name or self.path
+
+class ArchiveStats(models.Model):
+    scope = models.CharField(max_length=50, unique=True, default="global")
+
+    total_files = models.BigIntegerField(default=0)
+    indexed_files = models.BigIntegerField(default=0)
+
+    preview_ok = models.BigIntegerField(default=0)
+    preview_pending = models.BigIntegerField(default=0)
+    preview_failed = models.BigIntegerField(default=0)
+    preview_unsupported = models.BigIntegerField(default=0)
+
+    text_ok = models.BigIntegerField(default=0)
+    text_pending = models.BigIntegerField(default=0)
+    text_failed = models.BigIntegerField(default=0)
+    text_skipped = models.BigIntegerField(default=0)
+
+    metadata_ok = models.BigIntegerField(default=0)
+    metadata_pending = models.BigIntegerField(default=0)
+    metadata_failed = models.BigIntegerField(default=0)
+    metadata_skipped = models.BigIntegerField(default=0)
+
+    embedding_ok = models.BigIntegerField(default=0)
+    embedding_pending = models.BigIntegerField(default=0)
+    embedding_failed = models.BigIntegerField(default=0)
+    embedding_skipped = models.BigIntegerField(default=0)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.scope

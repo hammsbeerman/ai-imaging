@@ -21,6 +21,7 @@ from indexer.models import (
     UserAccessRoot,
     ProcessingStatus,
     PreviewStatus,
+    ArchiveStats,
 )
 from indexer.open_links import build_smb_folder, build_unc_folder, folder_rel
 from indexer.tasks_preview import process_preview_task
@@ -248,49 +249,60 @@ def ui_collections(request):
 def ui_home(request):
     settings = IndexerSettings.load()
     allowed = _allowed_root_ids(request.user)
-    total_files = Image.objects.count()
-    indexed = Image.objects.filter(indexed=True).count()
+
+    stats = ArchiveStats.objects.filter(scope="global").first()
+    if not stats:
+        stats = ArchiveStats(
+            scope="global",
+            total_files=0,
+            indexed_files=0,
+            preview_ok=0,
+            preview_pending=0,
+            preview_failed=0,
+            preview_unsupported=0,
+            text_ok=0,
+            text_pending=0,
+            text_failed=0,
+            text_skipped=0,
+            metadata_ok=0,
+            metadata_pending=0,
+            metadata_failed=0,
+            metadata_skipped=0,
+            embedding_ok=0,
+            embedding_pending=0,
+            embedding_failed=0,
+            embedding_skipped=0,
+        )
+
+    total_files = stats.total_files
+    indexed = stats.indexed_files
 
     preview_counts = {
-        "ok": Image.objects.filter(preview_status=PreviewStatus.OK).count(),
-        "pending_ready": Image.objects.filter(
-            skip_index=False,
-            preview_status=PreviewStatus.PENDING,
-        ).count(),
-        "failed": Image.objects.filter(preview_status=PreviewStatus.FAILED).count(),
-        "unsupported": Image.objects.filter(preview_status=PreviewStatus.UNSUPPORTED).count(),
+        "ok": stats.preview_ok,
+        "pending_ready": stats.preview_pending,
+        "failed": stats.preview_failed,
+        "unsupported": stats.preview_unsupported,
     }
 
     text_counts = {
-        "ok": Image.objects.filter(text_status=ProcessingStatus.OK).count(),
-        "pending_ready": Image.objects.filter(
-            skip_index=False,
-            text_status=ProcessingStatus.PENDING,
-            preview_status=PreviewStatus.OK,
-        ).count(),
-        "failed": Image.objects.filter(text_status=ProcessingStatus.FAILED).count(),
-        "skipped": Image.objects.filter(text_status=ProcessingStatus.SKIPPED).count(),
+        "ok": stats.text_ok,
+        "pending_ready": stats.text_pending,
+        "failed": stats.text_failed,
+        "skipped": stats.text_skipped,
     }
 
     metadata_counts = {
-        "ok": Image.objects.filter(metadata_status=ProcessingStatus.OK).count(),
-        "pending_ready": Image.objects.filter(
-            skip_index=False,
-            metadata_status=ProcessingStatus.PENDING,
-        ).count(),
-        "failed": Image.objects.filter(metadata_status=ProcessingStatus.FAILED).count(),
+        "ok": stats.metadata_ok,
+        "pending_ready": stats.metadata_pending,
+        "failed": stats.metadata_failed,
+        "skipped": stats.metadata_skipped,
     }
 
-    embedding_ready_qs = Image.objects.filter(
-        skip_index=False,
-        embedding_status=ProcessingStatus.PENDING,
-        preview_status=PreviewStatus.OK,
-    ).exclude(preview_path__isnull=True).exclude(preview_path="")
-
     embedding_counts = {
-        "ok": Image.objects.filter(embedding_status=ProcessingStatus.OK).count(),
-        "pending_ready": embedding_ready_qs.count(),
-        "failed": Image.objects.filter(embedding_status=ProcessingStatus.FAILED).count(),
+        "ok": stats.embedding_ok,
+        "pending_ready": stats.embedding_pending,
+        "failed": stats.embedding_failed,
+        "skipped": stats.embedding_skipped,
     }
 
     dupes = (
@@ -333,24 +345,24 @@ def ui_home(request):
             "done": metadata_counts["ok"],
             "ready": metadata_counts["pending_ready"],
             "failed": metadata_counts["failed"],
-            "other": 0,
+            "other": metadata_counts["skipped"],
             "done_pct": _pct(metadata_counts["ok"], total_files),
             "ready_pct": _pct(metadata_counts["pending_ready"], total_files),
             "failed_pct": _pct(metadata_counts["failed"], total_files),
-            "other_pct": 0,
-            "other_label": "",
+            "other_pct": _pct(metadata_counts["skipped"], total_files),
+            "other_label": "Skipped",
         },
         {
             "label": "Embedding",
             "done": embedding_counts["ok"],
             "ready": embedding_counts["pending_ready"],
             "failed": embedding_counts["failed"],
-            "other": 0,
+            "other": embedding_counts["skipped"],
             "done_pct": _pct(embedding_counts["ok"], total_files),
             "ready_pct": _pct(embedding_counts["pending_ready"], total_files),
             "failed_pct": _pct(embedding_counts["failed"], total_files),
-            "other_pct": 0,
-            "other_label": "",
+            "other_pct": _pct(embedding_counts["skipped"], total_files),
+            "other_label": "Skipped",
         },
     ]
 
@@ -413,8 +425,11 @@ def ui_home(request):
 
     worst_folders = Folder.objects.select_related("root")
 
-    if not request.user.is_superuser and allowed:
-        worst_folders = worst_folders.filter(root_id__in=allowed)
+    if not request.user.is_superuser:
+        if allowed:
+            worst_folders = worst_folders.filter(root_id__in=allowed)
+        else:
+            worst_folders = worst_folders.none()
 
     worst_folders = worst_folders.annotate(
         calc_preview_missing_count=Count(
@@ -460,7 +475,16 @@ def ui_home(request):
                 output_field=IntegerField(),
             )
         )
-    ).filter(health_score__gt=0).order_by(
+    ).filter(
+        health_score__gt=0
+    ).only(
+        "id",
+        "name",
+        "rel_path",
+        "root__name",
+        "root_id",
+        "parent_id",
+    ).order_by(
         "-health_score",
         "-calc_preview_failed_count",
         "-calc_metadata_failed_count",
@@ -479,7 +503,6 @@ def ui_home(request):
     embedding_queue = get_embedding_queue_counts()
 
     stuck = get_stuck_processing_counts()
-
     top_errors = get_top_pipeline_errors()
 
     preview_drift_count = get_preview_drift_count()
