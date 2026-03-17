@@ -4,6 +4,7 @@ import json
 import os
 import re
 import urllib.request
+from django.conf import settings
 from collections import Counter, defaultdict
 from typing import Any
 from uuid import UUID
@@ -15,7 +16,7 @@ from django.db import models
 from .clip_model import get_model
 from .models import Folder, Image
 
-QDRANT_URL = "http://localhost:6333"
+QDRANT_URL = getattr(settings, "QDRANT_URL", "http://127.0.0.1:6333").rstrip("/")
 COLLECTION = "images"
 
 device = "cpu"

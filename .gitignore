@@ -16,3 +16,6 @@ qdrant_storage/
 
 *.log
 gunicorn.ctl
+
+celerybeat-schedule
+celerybeat-schedule.*

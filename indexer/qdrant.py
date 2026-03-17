@@ -1,7 +1,16 @@
+from urllib.parse import urlparse
+from django.conf import settings
 from qdrant_client import QdrantClient
 from qdrant_client.models import VectorParams, Distance, PointStruct
 
-client = QdrantClient("localhost", port=6333)
+_qdrant_url = getattr(settings, "QDRANT_URL", "http://127.0.0.1:6333")
+_parsed = urlparse(_qdrant_url)
+
+client = QdrantClient(
+    host=_parsed.hostname or "127.0.0.1",
+    port=_parsed.port or 6333,
+)
+
 COLLECTION = "images"
 
 def ensure_collection():
