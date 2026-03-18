@@ -554,3 +554,15 @@ def retry_index_task(image_id):
         "index_result": index_result,
         "image_id": str(img.id),
     }
+
+# Import split task modules so Celery registers them via autodiscovery of indexer.tasks.
+from .tasks_preview import *  # noqa
+from .tasks_preview_repair import *  # noqa
+from .tasks_text import *  # noqa
+from .tasks_metadata import *  # noqa
+from .tasks_embedding import *  # noqa
+from .tasks_dedupe import *  # noqa
+from .tasks_queue_health import *  # noqa
+from .tasks_stats import *  # noqa
+from .tasks_folder_health import *  # noqa
+from .tasks_recovery import *  # noqa
