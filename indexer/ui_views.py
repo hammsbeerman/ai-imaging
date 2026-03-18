@@ -330,10 +330,6 @@ def ui_collections(request):
 
 @login_required
 def ui_home(request):
-    cache_key = "ui_home_v3"
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return cached
 
     stats = _latest_for_scope(ArchiveStats, scope="global") or _zero_archive_stats()
     queue_snapshot = _latest_for_scope(QueueHealthSnapshot, scope="global")
@@ -535,7 +531,7 @@ def ui_home(request):
     recent_preview_qs = (
         Image.objects
         .filter(preview_status=PreviewStatus.OK)
-        .order_by("-updated_at")[:5]
+        .order_by("-preview_created_at", "-updated_at")[:5]
     )
 
     recent_previews = []
@@ -544,7 +540,7 @@ def ui_home(request):
             {
                 "id": img.id,
                 "filename": getattr(img, "filename", "") or "",
-                "updated_at": getattr(img, "updated_at", None),
+                "display_time": getattr(img, "preview_created_at", None) or getattr(img, "updated_at", None),
                 "preview_status": getattr(img, "preview_status", ""),
                 "preview_url": _get_preview_url(img),
                 "path": getattr(img, "path", "") or "",
@@ -599,9 +595,8 @@ def ui_home(request):
         "recent_previews": recent_previews,
     }
 
-    response = render(request, "indexer/ui_home.html", context)
-    cache.set(cache_key, response, 30)
-    return response
+    return render(request, "indexer/ui_home.html", context)
+
 
 
 @login_required
