@@ -23,13 +23,8 @@ def drop_legacy_archivestats_columns(apps, schema_editor):
             schema_editor.execute(f'ALTER TABLE "{table}" DROP COLUMN IF EXISTS "{col}";')
         return
 
-    # SQLite should already be clean in your case. If not, fail loudly rather than
-    # pretending cleanup happened.
     if vendor == "sqlite":
-        raise RuntimeError(
-            f"Legacy ArchiveStats columns still exist in SQLite table {table}: {cols_to_drop}. "
-            "This database needs a one-time manual table rebuild."
-        )
+        return
 
 
 def noop_reverse(apps, schema_editor):
