@@ -1,8 +1,10 @@
 """
 URL configuration for media_index project.
 """
+from django.conf import settings
+from django.views.static import serve
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 
 from indexer.api import thumb
 from indexer.api_health import api_health_summary
@@ -76,4 +78,13 @@ urlpatterns = [
     path("api/image/<uuid:image_id>/similar/", similar, name="api_similar"),
     path("api/thumb/<uuid:image_id>/", thumb, name="api_thumb"),
     path("api/archive/", include("indexer.api_urls")),
+]
+
+# 🔥 MEDIA SERVING (works in prod without nginx)
+urlpatterns += [
+    re_path(
+        r"^media/(?P<path>.*)$",
+        serve,
+        {"document_root": settings.MEDIA_ROOT},
+    ),
 ]
