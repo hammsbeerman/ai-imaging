@@ -574,9 +574,9 @@ def ui_home(request):
 
     context = {
         "total_files": total_files,
-        "indexed": indexed,
-        "exact_duplicate_groups": stats.duplicate_groups or 0,
-        "exact_duplicate_file_count": stats.duplicate_items or 0,
+        "indexed_files": stats.indexed_files or 0,
+        "duplicate_groups": stats.duplicate_groups or 0,
+        "duplicate_items": stats.duplicate_items or 0,
         "text_quality": text_quality,
         "graph_rows": graph_rows,
         "mount_health": mount_health,
@@ -1790,7 +1790,6 @@ def ui_requeue_stage_bulk(request, stage):
     else:
         messages.error(request, f"Unknown stage: {stage}")
 
-    return redirect("ui_home_alt")
 
 
 def landing(request):
