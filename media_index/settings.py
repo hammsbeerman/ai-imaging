@@ -244,9 +244,9 @@ CELERY_TASK_ROUTES = {
     "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
     "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
     # --- stats / dashboard
-    "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "metadata"},
-    "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "metadata"},
-    "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "metadata"},
+    "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "ops"},
+    "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "ops"},
+    "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "ops"},
 
     # --- recovery (IMPORTANT)
     "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
