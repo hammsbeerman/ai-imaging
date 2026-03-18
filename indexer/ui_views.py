@@ -387,7 +387,7 @@ def ui_home(request):
         },
     ]
 
-    queue_snapshot = QueueHealthSnapshot.objects.filter(scope="global").first()
+    queue_snapshot = QueueHealthSnapshot.objects.order_by("-updated_at").first()
 
     queue_summary = {
         "scan": getattr(queue_snapshot, "scan_pending", 0),

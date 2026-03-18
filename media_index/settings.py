@@ -162,7 +162,7 @@ CELERY_BEAT_SCHEDULE = {
     "queue-previews-every-30-sec": {
         "task": "indexer.tasks_preview.queue_missing_previews_task",
         "schedule": 30.0,
-        "args": (128, 16),
+        "args": (64, 8),
         "options": {"queue": "preview", "routing_key": "preview"},
     },
     "queue-text-every-60-sec": {
@@ -207,18 +207,22 @@ CELERY_BEAT_SCHEDULE = {
     },
     "reset-stuck-processing-every-10-min": {
         "task": "indexer.tasks_recovery.reset_stale_processing_task",
-        "schedule": 600.0,
+        "schedule": 300.0,
         "args": (45,),
         "options": {"queue": "metadata"},
     },
     "rebuild_archive_stats": {
         "task": "indexer.tasks_stats.rebuild_archive_stats_task",
-        "schedule": 300.0,
+        "schedule": 240.0,
     },
     "rebuild_queue_health_snapshot": {
         "task": "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task",
-        "schedule": 300.0,
+        "schedule": 240.0,
         "args": (45,),
+    },
+    "rebuild_folder_health_snapshot": {
+        "task": "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task",
+        "schedule": 300.0,
     },
 }
 
@@ -239,6 +243,14 @@ CELERY_TASK_ROUTES = {
     "indexer.tasks_dedupe.dedupe_image_task": {"queue": "metadata"},
     "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
     "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
+    # --- stats / dashboard
+    "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "metadata"},
+    "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "metadata"},
+    "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "metadata"},
+
+    # --- recovery (IMPORTANT)
+    "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
+    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "metadata"},
 }
 
 INDEX_PREVIEW_ROOT = os.getenv("INDEX_PREVIEW_ROOT", "/mnt/ai-previews/development")
