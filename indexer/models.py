@@ -102,6 +102,8 @@ class Image(models.Model):
 
     created = models.DateTimeField(auto_now_add=True)
 
+    updated_at = models.DateTimeField(auto_now=True, db_index=True)
+
     file_ext = models.CharField(max_length=20, blank=True, default="", db_index=True)
     mime_type = models.CharField(max_length=120, blank=True, default="")
     preview_path = models.TextField(blank=True, default="")
