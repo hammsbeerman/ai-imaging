@@ -1,188 +1,224 @@
-{% extends "indexer/base.html" %}
-
-{% block title %}Home · AI Image Catalog{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
-{% block page_meta %}Quick view of archive scale, queue health, and worker timing{% endblock %}
-
-{% block content %}
-
-<div class="row g-3 mb-4">
-  <div class="col-6 col-xl-3">
-    <div class="page-card p-3 h-100">
-      <div class="text-muted small">Total files</div>
-      <div class="display-6 fw-semibold">{{ total_files|default:"0" }}</div>
-      <div class="small text-muted mt-2">Stats snapshot{% if stats_updated_at %} · {{ stats_updated_at|timesince }} ago{% endif %}</div>
-    </div>
-  </div>
-  <div class="col-6 col-xl-3">
-    <div class="page-card p-3 h-100">
-      <div class="text-muted small">Indexed</div>
-      <div class="display-6 fw-semibold">{{ indexed|default:"0" }}</div>
-      <div class="small text-muted mt-2">{{ exact_duplicate_groups|default:"0" }} duplicate groups</div>
-    </div>
-  </div>
-  <div class="col-6 col-xl-3">
-    <a href="/ui/duplicates/" class="page-card p-3 h-100 text-decoration-none text-reset d-block">
-      <div class="text-muted small">Files in dupes</div>
-      <div class="display-6 fw-semibold">{{ exact_duplicate_file_count|default:"0" }}</div>
-      <div class="small text-muted mt-2">Open duplicate review</div>
-    </a>
-  </div>
-  <div class="col-6 col-xl-3">
-    <div class="page-card p-3 h-100">
-      <div class="text-muted small">Queue snapshot</div>
-      <div class="display-6 fw-semibold">{% if queue_snapshot_updated_at %}{{ queue_snapshot_updated_at|timesince }}{% else %}—{% endif %}</div>
-      <div class="small text-muted mt-2">Since last rebuild</div>
-    </div>
-  </div>
-</div>
-
-<div class="page-card p-3 mb-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-      <h2 class="h5 mb-1">Pipeline overview</h2>
-      <div class="text-muted small">Done, ready now, failed, and skipped or unsupported by stage</div>
+      <h1 class="h3 mb-1">Dashboard</h1>
+      <div class="text-muted small">
+        Archive stats:
+        {% if stats_updated_at %}{{ stats_updated_at }}{% else %}No snapshot yet{% endif %}
+        · Queue snapshot:
+        {% if queue_snapshot_updated_at %}{{ queue_snapshot_updated_at }}{% else %}No snapshot yet{% endif %}
+      </div>
     </div>
   </div>
 
-  {% for row in graph_rows %}
-    <div class="mb-4">
-      <div class="d-flex justify-content-between align-items-center mb-1">
-        <div class="fw-semibold">{{ row.label }}</div>
-        <div class="small text-muted">
-          Done {{ row.done }} · Ready {{ row.ready }} · Processing {{ row.processing }} · Failed {{ row.failed }}{% if row.other_label %} · {{ row.other_label }} {{ row.other }}{% endif %}
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Total files</div>
+          <div class="fs-3 fw-semibold">{{ total_files|default:0 }}</div>
         </div>
       </div>
-
-      <div class="progress" style="height: 24px;">
-        <div class="progress-bar bg-success js-progress-width" role="progressbar" data-width="{{ row.done_pct }}" title="Done: {{ row.done }}">{% if row.done_pct > 7 %}{{ row.done }}{% endif %}</div>
-        <div class="progress-bar bg-warning text-dark js-progress-width" role="progressbar" data-width="{{ row.ready_pct }}" title="Ready now: {{ row.ready }}">{% if row.ready_pct > 7 %}{{ row.ready }}{% endif %}</div>
-        <div class="progress-bar bg-danger js-progress-width" role="progressbar" data-width="{{ row.failed_pct }}" title="Failed: {{ row.failed }}">{% if row.failed_pct > 7 %}{{ row.failed }}{% endif %}</div>
-        {% if row.other_pct %}
-          <div class="progress-bar bg-secondary js-progress-width" role="progressbar" data-width="{{ row.other_pct }}" title="{{ row.other_label }}: {{ row.other }}">{% if row.other_pct > 7 %}{{ row.other }}{% endif %}</div>
-        {% endif %}
-      </div>
     </div>
-  {% empty %}
-    <div class="text-muted">No pipeline data available.</div>
-  {% endfor %}
-</div>
-
-<div class="page-card p-3 mb-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-      <h2 class="h5 mb-1">Queue health</h2>
-      <div class="text-muted small">Pending, processing, failures, and oldest ages from the queue snapshot</div>
-    </div>
-    <div class="small text-muted">{% if queue_snapshot_updated_at %}Updated {{ queue_snapshot_updated_at|timesince }} ago{% else %}No snapshot yet{% endif %}</div>
-  </div>
-
-  <div class="row g-3">
-    <div class="col-12 col-md-6 col-xl-2">
-      <div class="border rounded p-3 h-100">
-        <div class="text-muted small">Scan</div>
-        <div class="small mt-2">Pending dirs: <strong>{{ scan_queue.pending_dirs }}</strong></div>
-        <div class="small">Retrying dirs: <strong>{{ scan_queue.retrying_dirs }}</strong></div>
-        <div class="small">Done dirs: <strong>{{ scan_queue.done_dirs }}</strong></div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-6 col-xl-2">
-      <div class="border rounded p-3 h-100">
-        <div class="text-muted small">Preview</div>
-        <div class="small mt-2">Pending: <strong>{{ preview_queue.pending }}</strong></div>
-        <div class="small">Processing: <strong>{{ preview_queue.processing|default:"0" }}</strong></div>
-        <div class="small">Failed: <strong>{{ preview_queue.failed }}</strong></div>
-        <div class="small">Oldest pending: <strong>{% if preview_queue.oldest_pending_at %}{{ preview_queue.oldest_pending_at|timesince }}{% else %}—{% endif %}</strong></div>
-        <div class="small">Oldest processing: <strong>{% if preview_queue.oldest_processing_at %}{{ preview_queue.oldest_processing_at|timesince }}{% else %}—{% endif %}</strong></div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-6 col-xl-2">
-      <div class="border rounded p-3 h-100">
-        <div class="text-muted small">Text</div>
-        <div class="small mt-2">Pending: <strong>{{ text_queue.pending }}</strong></div>
-        <div class="small">Processing: <strong>{{ text_queue.processing }}</strong></div>
-        <div class="small">Failed: <strong>{{ text_queue.failed }}</strong></div>
-        <div class="small">Oldest pending: <strong>{% if text_queue.oldest_pending_at %}{{ text_queue.oldest_pending_at|timesince }}{% else %}—{% endif %}</strong></div>
-        <div class="small">Oldest processing: <strong>{% if text_queue.oldest_processing_at %}{{ text_queue.oldest_processing_at|timesince }}{% else %}—{% endif %}</strong></div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-6 col-xl-2">
-      <div class="border rounded p-3 h-100">
-        <div class="text-muted small">Metadata</div>
-        <div class="small mt-2">Pending: <strong>{{ metadata_queue.pending }}</strong></div>
-        <div class="small">Processing: <strong>{{ metadata_queue.processing }}</strong></div>
-        <div class="small">Failed: <strong>{{ metadata_queue.failed }}</strong></div>
-        <div class="small">Oldest pending: <strong>{% if metadata_queue.oldest_pending_at %}{{ metadata_queue.oldest_pending_at|timesince }}{% else %}—{% endif %}</strong></div>
-        <div class="small">Oldest processing: <strong>{% if metadata_queue.oldest_processing_at %}{{ metadata_queue.oldest_processing_at|timesince }}{% else %}—{% endif %}</strong></div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-6 col-xl-2">
-      <div class="border rounded p-3 h-100">
-        <div class="text-muted small">Embedding</div>
-        <div class="small mt-2">Pending: <strong>{{ embedding_queue.pending }}</strong></div>
-        <div class="small">Processing: <strong>{{ embedding_queue.processing }}</strong></div>
-        <div class="small">Failed: <strong>{{ embedding_queue.failed }}</strong></div>
-        <div class="small">Oldest pending: <strong>{% if embedding_queue.oldest_pending_at %}{{ embedding_queue.oldest_pending_at|timesince }}{% else %}—{% endif %}</strong></div>
-        <div class="small">Oldest processing: <strong>{% if embedding_queue.oldest_processing_at %}{{ embedding_queue.oldest_processing_at|timesince }}{% else %}—{% endif %}</strong></div>
-      </div>
-    </div>
-
-    <div class="col-12 col-md-6 col-xl-2">
-      <div class="border rounded p-3 h-100">
-        <div class="text-muted small">Stuck processing</div>
-        <div class="small mt-2">Preview: <strong>{{ stuck_processing.preview|default:"0" }}</strong></div>
-        <div class="small">Text: <strong>{{ stuck_processing.text|default:"0" }}</strong></div>
-        <div class="small">Metadata: <strong>{{ stuck_processing.metadata|default:"0" }}</strong></div>
-        <div class="small">Embedding: <strong>{{ stuck_processing.embedding|default:"0" }}</strong></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-lg-7">
-    <div class="page-card p-3 h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-          <h2 class="h5 mb-1">Task runtime metrics</h2>
-          <div class="text-muted small">Latest background timings for the main maintenance and worker queue tasks</div>
+    <div class="col-md-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Indexed</div>
+          <div class="fs-3 fw-semibold">{{ indexed|default:0 }}</div>
         </div>
       </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Duplicate groups</div>
+          <div class="fs-3 fw-semibold">{{ exact_duplicate_groups|default:0 }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Duplicate items</div>
+          <div class="fs-3 fw-semibold">{{ exact_duplicate_file_count|default:0 }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <strong>Pipeline Status</strong>
+        </div>
+        <div class="card-body">
+          {% for row in graph_rows %}
+            <div class="mb-3">
+              <div class="d-flex justify-content-between mb-1">
+                <strong>{{ row.label }}</strong>
+                <span class="text-muted small">
+                  done {{ row.done }} · ready {{ row.ready }} · processing {{ row.processing }} · failed {{ row.failed }}
+                </span>
+              </div>
+              <div class="progress" style="height: 18px;">
+                <div class="progress-bar bg-success" style="width: {{ row.done_pct }}%"></div>
+                <div class="progress-bar bg-warning text-dark" style="width: {{ row.ready_pct }}%"></div>
+                <div class="progress-bar bg-info text-dark" style="width: {{ row.processing_pct }}%"></div>
+                <div class="progress-bar bg-danger" style="width: {{ row.failed_pct }}%"></div>
+                <div class="progress-bar bg-secondary" style="width: {{ row.other_pct }}%"></div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <strong>System Health</strong>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="small text-muted">Preview mount</div>
+            <div class="fw-semibold">
+              {% if mount_health.healthy %}
+                <span class="badge text-bg-success">Healthy</span>
+              {% else %}
+                <span class="badge text-bg-danger">Problem</span>
+              {% endif %}
+            </div>
+            <div class="small text-muted mt-1">{{ mount_health.path }}</div>
+          </div>
+
+          <div class="mb-3">
+            <div class="small text-muted">Queue snapshot age</div>
+            <div class="fw-semibold">{{ system_signals.queue_stale_minutes|default:"—" }} min</div>
+          </div>
+
+          <div class="mb-3">
+            <div class="small text-muted">Archive stats age</div>
+            <div class="fw-semibold">{{ system_signals.stats_stale_minutes|default:"—" }} min</div>
+          </div>
+
+          <div>
+            <div class="small text-muted">Stuck jobs</div>
+            <div class="small">
+              Preview {{ stuck_processing.preview|default:0 }}<br>
+              Text {{ stuck_processing.text|default:0 }}<br>
+              Metadata {{ stuck_processing.metadata|default:0 }}<br>
+              Embedding {{ stuck_processing.embedding|default:0 }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong>Recent Previewed Files</strong>
+      <span class="text-muted small">Latest 5</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        {% for item in recent_previews %}
+          <div class="col-6 col-md-4 col-xl-2">
+            <a href="{% url 'indexer:image_detail' item.id %}" class="text-decoration-none text-body">
+              <div class="card h-100 border-0">
+                <div class="ratio ratio-1x1 bg-light rounded overflow-hidden">
+                  <img
+                    src="{{ item.preview_url }}"
+                    alt="{{ item.filename }}"
+                    class="w-100 h-100 object-fit-cover"
+                  >
+                </div>
+                <div class="pt-2">
+                  <div class="small fw-semibold text-truncate">{{ item.filename }}</div>
+                  <div class="small text-muted">{{ item.updated_at }}</div>
+                </div>
+              </div>
+            </a>
+          </div>
+        {% empty %}
+          <div class="col-12">
+            <div class="text-muted">No recent previews available.</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <strong>Queue Pressure</strong>
+        </div>
+        <div class="card-body">
+          <div class="row small">
+            <div class="col-6 mb-2">Scan: <strong>{{ queue_summary.scan|default:0 }}</strong></div>
+            <div class="col-6 mb-2">Preview: <strong>{{ queue_summary.preview|default:0 }}</strong></div>
+            <div class="col-6 mb-2">Text: <strong>{{ queue_summary.text|default:0 }}</strong></div>
+            <div class="col-6 mb-2">Metadata: <strong>{{ queue_summary.metadata|default:0 }}</strong></div>
+            <div class="col-6 mb-2">Embedding: <strong>{{ queue_summary.embedding|default:0 }}</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <strong>Worst Folders</strong>
+        </div>
+        <div class="card-body">
+          {% if worst_folders %}
+            <div class="list-group list-group-flush">
+              {% for folder in worst_folders %}
+                <div class="list-group-item px-0">
+                  <div class="fw-semibold">{{ folder.path|default:folder.label }}</div>
+                  <div class="small text-muted">Rank {{ folder.rank }}</div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-muted">No folder health snapshot yet.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header bg-white">
+      <strong>Task Runtime</strong>
+    </div>
+    <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
+        <table class="table table-sm mb-0 align-middle">
           <thead>
             <tr>
               <th>Task</th>
               <th>Status</th>
-              <th class="text-end">Duration</th>
-              <th class="text-end">Last finished</th>
+              <th>Duration</th>
+              <th>Finished</th>
             </tr>
           </thead>
           <tbody>
             {% for row in task_runtime_rows %}
               <tr>
                 <td>{{ row.label }}</td>
+                <td>{{ row.status }}</td>
                 <td>
-                  {% if row.status == "ok" %}
-                    <span class="badge text-bg-success">ok</span>
-                  {% elif row.status == "failed" %}
-                    <span class="badge text-bg-danger">failed</span>
-                  {% elif row.status == "skipped" %}
-                    <span class="badge text-bg-secondary">skipped</span>
+                  {% if row.duration_ms is not None %}
+                    {{ row.duration_ms }} ms
                   {% else %}
-                    <span class="badge text-bg-light">{{ row.status }}</span>
+                    —
                   {% endif %}
                 </td>
-                <td class="text-end">{% if row.duration_ms is not None %}{{ row.duration_ms }} ms{% else %}—{% endif %}</td>
-                <td class="text-end">{% if row.finished_at %}{{ row.finished_at|timesince }} ago{% else %}—{% endif %}</td>
-              </tr>
-            {% empty %}
-              <tr>
-                <td colspan="4" class="text-muted text-center py-3">No task timing rows yet.</td>
+                <td>{{ row.finished_at|default:"—" }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -190,185 +226,4 @@
       </div>
     </div>
   </div>
-
-  <div class="col-lg-5">
-    <div class="page-card p-3 h-100">
-      <h2 class="h5 mb-3">Text quality</h2>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle mb-0">
-          <tbody>
-            <tr><th class="text-muted fw-normal">Native PDF text</th><td>{{ text_quality.native_pdf|default:"0" }}</td></tr>
-            <tr><th class="text-muted fw-normal">OCR image text</th><td>{{ text_quality.ocr_image|default:"0" }}</td></tr>
-            <tr><th class="text-muted fw-normal">High confidence</th><td>{{ text_quality.high_conf|default:"0" }}</td></tr>
-            <tr><th class="text-muted fw-normal">Mid confidence</th><td>{{ text_quality.mid_conf|default:"0" }}</td></tr>
-            <tr><th class="text-muted fw-normal">Low confidence</th><td>{{ text_quality.low_conf|default:"0" }}</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 </div>
-<div class="page-card p-3 mb-3">
-  <h2 class="h5 mb-3">Queue Pressure</h2>
-
-  <div class="row text-center">
-    <div class="col">
-      <div class="small text-muted">Scan</div>
-      <div class="fw-semibold">{{ queue_summary.scan }}</div>
-    </div>
-    <div class="col">
-      <div class="small text-muted">Preview</div>
-      <div class="fw-semibold">{{ queue_summary.preview }}</div>
-    </div>
-    <div class="col">
-      <div class="small text-muted">Text</div>
-      <div class="fw-semibold">{{ queue_summary.text }}</div>
-    </div>
-    <div class="col">
-      <div class="small text-muted">Metadata</div>
-      <div class="fw-semibold">{{ queue_summary.metadata }}</div>
-    </div>
-    <div class="col">
-      <div class="small text-muted">Embedding</div>
-      <div class="fw-semibold">{{ queue_summary.embedding }}</div>
-    </div>
-  </div>
-</div>
-
-<div class="page-card p-3 mb-3">
-  <h2 class="h5 mb-3">Worst Folders</h2>
-
-  <table class="table table-sm">
-    <thead>
-      <tr>
-        <th>Folder</th>
-        <th>Score</th>
-        <th>Files</th>
-        <th>Issues</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for f in worst_folders %}
-      <tr>
-        <td class="mono">{{ f.folder|truncatechars:50 }}</td>
-        <td>{{ f.health_score|floatformat:1 }}</td>
-        <td>{{ f.file_count }}</td>
-        <td>
-          P: {{ f.preview_failed }} /
-          M: {{ f.metadata_failed }} /
-          T: {{ f.text_failed }}
-        </td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="4" class="text-muted">No data yet</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<div class="page-card p-3 mb-3">
-  <h2 class="h5 mb-3">System Signals</h2>
-
-  <div class="d-flex gap-4">
-    <div>
-      <div class="small text-muted">Preview Mount</div>
-      <div class="{% if system_signals.mount_ok %}text-success{% else %}text-danger{% endif %}">
-        {% if system_signals.mount_ok %}Healthy{% else %}Problem{% endif %}
-      </div>
-    </div>
-
-    <div>
-      <div class="small text-muted">Missing Previews</div>
-      <div>{{ system_signals.missing_previews }}</div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-lg-6">
-    <div class="page-card p-3 h-100">
-      <h2 class="h5 mb-3">Top pipeline errors</h2>
-      {% if top_errors %}
-        <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0">
-            <thead>
-              <tr>
-                <th>Stage</th>
-                <th>Error</th>
-                <th class="text-end">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in top_errors %}
-                <tr>
-                  <td>{{ row.stage }}</td>
-                  <td class="small text-break">{{ row.error }}</td>
-                  <td class="text-end">{{ row.count }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% else %}
-        <div class="text-muted small">No pipeline errors right now.</div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="col-lg-6">
-    <div class="page-card p-3 h-100">
-      <h2 class="h5 mb-3">Preview mount</h2>
-      <div class="fw-semibold {% if mount_health.healthy %}text-success{% else %}text-danger{% endif %}">
-        {% if mount_health.healthy %}Healthy{% else %}Problem{% endif %}
-      </div>
-      <div class="small text-muted mt-2 text-break">{{ mount_health.path }}</div>
-      <div class="small mt-2">
-        exists={{ mount_health.exists|yesno:"yes,no" }},
-        readable={{ mount_health.readable|yesno:"yes,no" }},
-        writable={{ mount_health.writable|yesno:"yes,no" }}
-      </div>
-      <hr>
-      <div class="text-muted small">Preview rows marked OK but missing on disk</div>
-      <div class="display-6 fw-semibold {% if missing_ok_previews %}text-danger{% endif %}">{{ missing_ok_previews|default:"0" }}</div>
-      <div class="small text-muted mt-2">These should be reset by the repair sweep.</div>
-    </div>
-  </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-lg-8">
-    <div class="page-card p-3 h-100">
-      <h2 class="h5 mb-3">Search the archive</h2>
-      <form action="/ui/search/" method="get" class="row g-2">
-        <div class="col">
-          <input type="text" name="q" class="form-control" placeholder="Search for logo, brochure, truck wrap, customer name...">
-        </div>
-        <div class="col-auto">
-          <button type="submit" class="btn btn-primary">Search</button>
-        </div>
-      </form>
-      <div class="small text-muted mt-3">
-        Try:
-        <a href="/ui/search/?q=logo">logo</a>,
-        <a href="/ui/search/?q=brochure">brochure</a>,
-        <a href="/ui/search/?q=truck+wrap">truck wrap</a>,
-        <a href="/ui/search/?q=wedding+invite">wedding invite</a>
-      </div>
-    </div>
-  </div>
-
-  <div class="col-lg-4">
-    <div class="page-card p-3 h-100">
-      <h2 class="h5 mb-3">Quick links</h2>
-      <div class="d-grid gap-2">
-        <a class="btn btn-outline-primary" href="/ui/search/">Open search</a>
-        <a class="btn btn-outline-secondary" href="/ui/status/">View status</a>
-        <a class="btn btn-outline-secondary" href="/ui/health/">Index health</a>
-        <a class="btn btn-outline-secondary" href="/ui/duplicates/">Duplicate review</a>
-        <a class="btn btn-outline-secondary" href="/admin/">Admin</a>
-      </div>
-    </div>
-  </div>
-</div>
-
-{% endblock %}

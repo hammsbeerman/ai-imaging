@@ -107,6 +107,7 @@ def _open_folder_links_for(img: Image, settings: IndexerSettings):
         "open_folder_smb": build_smb_folder(smb_base, rel_folder) if smb_base else None,
     }
 
+
 def _folder_breadcrumbs(folder: Folder):
     crumbs = []
     cur = folder
@@ -132,6 +133,7 @@ def _open_folder_links_for_folder(folder: Folder):
         "open_folder_smb": build_smb_folder(smb_base, rel_folder) if smb_base else None,
     }
 
+
 def _cached_child_folders(folder_id: int, allowed_root_ids, ttl: int = 60):
     allowed_root_ids = sorted(set(allowed_root_ids))
     cache_key = f"browse:children:{folder_id}:{','.join(str(x) for x in allowed_root_ids)}"
@@ -155,19 +157,16 @@ def _cached_child_folders(folder_id: int, allowed_root_ids, ttl: int = 60):
         .order_by("name")
     )
 
+
 def _folder_scope_prefix(folder: Folder) -> str:
     return (folder.rel_path or "").strip("/")
 
 
 def _apply_folder_scope_qs(qs, folder: Folder):
-    """
-    Restrict an Image queryset to one folder subtree.
-    """
     if not folder:
         return qs
 
     prefix = _folder_scope_prefix(folder)
-
     qs = qs.filter(root_id=folder.root_id)
 
     if not prefix:
@@ -180,10 +179,6 @@ def _apply_folder_scope_qs(qs, folder: Folder):
 
 
 def _image_in_folder_scope(img: Image, folder: Folder) -> bool:
-    """
-    Restrict already-hydrated Image objects to one folder subtree.
-    Useful for semantic/hybrid result lists after hydration.
-    """
     if not folder:
         return True
 
@@ -204,10 +199,12 @@ def _filter_images_to_folder_scope(images, folder: Folder):
         return images
     return [img for img in images if _image_in_folder_scope(img, folder)]
 
+
 def _pct(n, total):
     if not total:
         return 0
     return round((n / total) * 100, 1)
+
 
 def _folder_health_counts(folder_ids: list[int]) -> dict[int, dict[str, int]]:
     if not folder_ids:
@@ -226,7 +223,7 @@ def _folder_health_counts(folder_ids: list[int]) -> dict[int, dict[str, int]]:
         )
     )
 
-    out = {
+    return {
         row["folder_id"]: {
             "preview_failed_count": row["preview_failed_count"],
             "missing_preview_count": row["missing_preview_count"],
@@ -235,7 +232,88 @@ def _folder_health_counts(folder_ids: list[int]) -> dict[int, dict[str, int]]:
         for row in rows
     }
 
-    return out
+
+def _latest_for_scope(model, scope="global"):
+    qs = model.objects.all()
+    field_names = {f.name for f in model._meta.fields}
+
+    if "scope" in field_names:
+        qs = qs.filter(scope=scope)
+
+    if "updated_at" in field_names:
+        return qs.order_by("-updated_at").first()
+
+    return qs.order_by("-id").first()
+
+
+def _zero_archive_stats():
+    return ArchiveStats(
+        scope="global",
+        total_files=0,
+        indexed_files=0,
+        preview_ok=0,
+        preview_pending=0,
+        preview_processing=0,
+        preview_failed=0,
+        preview_unsupported=0,
+        text_ok=0,
+        text_pending=0,
+        text_processing=0,
+        text_failed=0,
+        text_skipped=0,
+        text_native_pdf=0,
+        text_ocr_image=0,
+        text_high_conf=0,
+        text_mid_conf=0,
+        text_low_conf=0,
+        metadata_ok=0,
+        metadata_pending=0,
+        metadata_processing=0,
+        metadata_failed=0,
+        metadata_skipped=0,
+        embedding_ok=0,
+        embedding_pending=0,
+        embedding_processing=0,
+        embedding_failed=0,
+        embedding_skipped=0,
+        duplicate_groups=0,
+        duplicate_items=0,
+    )
+
+
+def _age_minutes(dt):
+    if not dt:
+        return None
+    return int((timezone.now() - dt).total_seconds() // 60)
+
+
+def _get_preview_url(img):
+    for attr in ("preview_url", "thumb_url", "thumbnail_url"):
+        value = getattr(img, attr, None)
+        if callable(value):
+            try:
+                value = value()
+            except Exception:
+                value = None
+        if value:
+            return value
+
+    rel_candidates = [
+        getattr(img, "preview_rel_path", None),
+        getattr(img, "thumb_rel_path", None),
+        getattr(img, "thumbnail_rel_path", None),
+        getattr(img, "thumb_path", None),
+        getattr(img, "preview_path", None),
+    ]
+    rel_path = next((x for x in rel_candidates if x), None)
+    if rel_path:
+        rel_path = str(rel_path).lstrip("/")
+        if rel_path.startswith("http://") or rel_path.startswith("https://") or rel_path.startswith("/"):
+            return rel_path
+        return f"/media/{rel_path}"
+
+    return ""
+
 
 @login_required
 def ui_collections(request):
@@ -249,48 +327,20 @@ def ui_collections(request):
         },
     )
 
+
 @login_required
 def ui_home(request):
-    cache_key = "ui_home_v1"
-
+    cache_key = "ui_home_v3"
     cached = cache.get(cache_key)
-    if cached:
+    if cached is not None:
         return cached
 
-    stats = ArchiveStats.objects.filter(scope="global").first()
-    if not stats:
-        stats = ArchiveStats(
-            scope="global",
-            total_files=0,
-            indexed_files=0,
-            preview_ok=0,
-            preview_pending=0,
-            preview_processing=0,
-            preview_failed=0,
-            preview_unsupported=0,
-            text_ok=0,
-            text_pending=0,
-            text_processing=0,
-            text_failed=0,
-            text_skipped=0,
-            metadata_ok=0,
-            metadata_pending=0,
-            metadata_processing=0,
-            metadata_failed=0,
-            metadata_skipped=0,
-            embedding_ok=0,
-            embedding_pending=0,
-            embedding_processing=0,
-            embedding_failed=0,
-            embedding_skipped=0,
-            duplicate_groups=0,
-            duplicate_items=0,
-            text_native_pdf=0,
-            text_ocr_image=0,
-            text_high_conf=0,
-            text_mid_conf=0,
-            text_low_conf=0,
-        )
+    stats = _latest_for_scope(ArchiveStats, scope="global") or _zero_archive_stats()
+    queue_snapshot = _latest_for_scope(QueueHealthSnapshot, scope="global")
+
+    worst_folders = list(
+        FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10]
+    )
 
     total_files = stats.total_files or 0
     indexed = stats.indexed_files or 0
@@ -298,38 +348,38 @@ def ui_home(request):
     preview_counts = {
         "ok": stats.preview_ok or 0,
         "pending_ready": stats.preview_pending or 0,
-        "processing": getattr(stats, "preview_processing", 0) or 0,
+        "processing": stats.preview_processing or 0,
         "failed": stats.preview_failed or 0,
         "unsupported": stats.preview_unsupported or 0,
     }
     text_counts = {
         "ok": stats.text_ok or 0,
         "pending_ready": stats.text_pending or 0,
-        "processing": getattr(stats, "text_processing", 0) or 0,
+        "processing": stats.text_processing or 0,
         "failed": stats.text_failed or 0,
         "skipped": stats.text_skipped or 0,
     }
     metadata_counts = {
         "ok": stats.metadata_ok or 0,
         "pending_ready": stats.metadata_pending or 0,
-        "processing": getattr(stats, "metadata_processing", 0) or 0,
+        "processing": stats.metadata_processing or 0,
         "failed": stats.metadata_failed or 0,
         "skipped": stats.metadata_skipped or 0,
     }
     embedding_counts = {
         "ok": stats.embedding_ok or 0,
         "pending_ready": stats.embedding_pending or 0,
-        "processing": getattr(stats, "embedding_processing", 0) or 0,
+        "processing": stats.embedding_processing or 0,
         "failed": stats.embedding_failed or 0,
         "skipped": stats.embedding_skipped or 0,
     }
 
     text_quality = {
-        "native_pdf": getattr(stats, "text_native_pdf", 0) or 0,
-        "ocr_image": getattr(stats, "text_ocr_image", 0) or 0,
-        "high_conf": getattr(stats, "text_high_conf", 0) or 0,
-        "mid_conf": getattr(stats, "text_mid_conf", 0) or 0,
-        "low_conf": getattr(stats, "text_low_conf", 0) or 0,
+        "native_pdf": stats.text_native_pdf or 0,
+        "ocr_image": stats.text_ocr_image or 0,
+        "high_conf": stats.text_high_conf or 0,
+        "mid_conf": stats.text_mid_conf or 0,
+        "low_conf": stats.text_low_conf or 0,
     }
 
     graph_rows = [
@@ -342,6 +392,7 @@ def ui_home(request):
             "other": preview_counts["unsupported"],
             "done_pct": _pct(preview_counts["ok"], total_files),
             "ready_pct": _pct(preview_counts["pending_ready"], total_files),
+            "processing_pct": _pct(preview_counts["processing"], total_files),
             "failed_pct": _pct(preview_counts["failed"], total_files),
             "other_pct": _pct(preview_counts["unsupported"], total_files),
             "other_label": "Unsupported",
@@ -355,6 +406,7 @@ def ui_home(request):
             "other": text_counts["skipped"],
             "done_pct": _pct(text_counts["ok"], total_files),
             "ready_pct": _pct(text_counts["pending_ready"], total_files),
+            "processing_pct": _pct(text_counts["processing"], total_files),
             "failed_pct": _pct(text_counts["failed"], total_files),
             "other_pct": _pct(text_counts["skipped"], total_files),
             "other_label": "Skipped",
@@ -368,6 +420,7 @@ def ui_home(request):
             "other": metadata_counts["skipped"],
             "done_pct": _pct(metadata_counts["ok"], total_files),
             "ready_pct": _pct(metadata_counts["pending_ready"], total_files),
+            "processing_pct": _pct(metadata_counts["processing"], total_files),
             "failed_pct": _pct(metadata_counts["failed"], total_files),
             "other_pct": _pct(metadata_counts["skipped"], total_files),
             "other_label": "Skipped",
@@ -381,20 +434,60 @@ def ui_home(request):
             "other": embedding_counts["skipped"],
             "done_pct": _pct(embedding_counts["ok"], total_files),
             "ready_pct": _pct(embedding_counts["pending_ready"], total_files),
+            "processing_pct": _pct(embedding_counts["processing"], total_files),
             "failed_pct": _pct(embedding_counts["failed"], total_files),
             "other_pct": _pct(embedding_counts["skipped"], total_files),
             "other_label": "Skipped",
         },
     ]
 
-    queue_snapshot = QueueHealthSnapshot.objects.order_by("-updated_at").first()
-
     queue_summary = {
-        "scan": getattr(queue_snapshot, "scan_pending", 0),
-        "preview": getattr(queue_snapshot, "preview_pending", 0),
-        "text": getattr(queue_snapshot, "text_pending", 0),
-        "metadata": getattr(queue_snapshot, "metadata_pending", 0),
-        "embedding": getattr(queue_snapshot, "embedding_pending", 0),
+        "scan": getattr(queue_snapshot, "scan_pending_dirs", 0) if queue_snapshot else 0,
+        "preview": getattr(queue_snapshot, "preview_pending", 0) if queue_snapshot else 0,
+        "text": getattr(queue_snapshot, "text_pending", 0) if queue_snapshot else 0,
+        "metadata": getattr(queue_snapshot, "metadata_pending", 0) if queue_snapshot else 0,
+        "embedding": getattr(queue_snapshot, "embedding_pending", 0) if queue_snapshot else 0,
+    }
+
+    scan_queue = {
+        "pending_dirs": getattr(queue_snapshot, "scan_pending_dirs", 0) if queue_snapshot else 0,
+        "retrying_dirs": getattr(queue_snapshot, "scan_retrying_dirs", 0) if queue_snapshot else 0,
+        "done_dirs": getattr(queue_snapshot, "scan_done_dirs", 0) if queue_snapshot else 0,
+    }
+
+    preview_queue = {
+        "pending": getattr(queue_snapshot, "preview_pending", 0) if queue_snapshot else 0,
+        "processing": getattr(queue_snapshot, "preview_processing", 0) if queue_snapshot else 0,
+        "oldest_pending_at": getattr(queue_snapshot, "oldest_preview_pending_at", None) if queue_snapshot else None,
+        "oldest_processing_at": getattr(queue_snapshot, "oldest_preview_processing_at", None) if queue_snapshot else None,
+    }
+
+    text_queue = {
+        "pending": getattr(queue_snapshot, "text_pending", 0) if queue_snapshot else 0,
+        "processing": getattr(queue_snapshot, "text_processing", 0) if queue_snapshot else 0,
+        "oldest_pending_at": getattr(queue_snapshot, "oldest_text_pending_at", None) if queue_snapshot else None,
+        "oldest_processing_at": getattr(queue_snapshot, "oldest_text_processing_at", None) if queue_snapshot else None,
+    }
+
+    metadata_queue = {
+        "pending": getattr(queue_snapshot, "metadata_pending", 0) if queue_snapshot else 0,
+        "processing": getattr(queue_snapshot, "metadata_processing", 0) if queue_snapshot else 0,
+        "oldest_pending_at": getattr(queue_snapshot, "oldest_metadata_pending_at", None) if queue_snapshot else None,
+        "oldest_processing_at": getattr(queue_snapshot, "oldest_metadata_processing_at", None) if queue_snapshot else None,
+    }
+
+    embedding_queue = {
+        "pending": getattr(queue_snapshot, "embedding_pending", 0) if queue_snapshot else 0,
+        "processing": getattr(queue_snapshot, "embedding_processing", 0) if queue_snapshot else 0,
+        "oldest_pending_at": getattr(queue_snapshot, "oldest_embedding_pending_at", None) if queue_snapshot else None,
+        "oldest_processing_at": getattr(queue_snapshot, "oldest_embedding_processing_at", None) if queue_snapshot else None,
+    }
+
+    stuck_processing = {
+        "preview": getattr(queue_snapshot, "stuck_preview", 0) if queue_snapshot else 0,
+        "text": getattr(queue_snapshot, "stuck_text", 0) if queue_snapshot else 0,
+        "metadata": getattr(queue_snapshot, "stuck_metadata", 0) if queue_snapshot else 0,
+        "embedding": getattr(queue_snapshot, "stuck_embedding", 0) if queue_snapshot else 0,
     }
 
     metric_task_names = [
@@ -406,32 +499,13 @@ def ui_home(request):
         "queue_missing_embeddings_task",
         "queue_missing_metadata_task",
         "reset_stale_processing_task",
+        "reset_stale_preview_processing_task",
     ]
     recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
+
     latest_metric_by_task = {}
     for row in recent_metrics:
         latest_metric_by_task.setdefault(row.task_name, row)
-
-    worst_folders = list(
-        FolderHealthSnapshot.objects.filter(scope="global").order_by("rank")[:10]
-    )
-
-    # --- Mount health (FIXED)
-    try:
-        mount_health = get_mount_health()
-    except Exception:
-        mount_health = {
-            "path": "",
-            "exists": False,
-            "readable": False,
-            "writable": False,
-            "healthy": False,
-        }
-    
-    system_signals = {
-        "missing_previews": 0,  # hook later
-        "mount_ok": mount_health.get("healthy", False),
-    }
 
     runtime_labels = {
         "rebuild_archive_stats_task": "Archive stats rebuild",
@@ -442,7 +516,9 @@ def ui_home(request):
         "queue_missing_embeddings_task": "Embedding queue batch",
         "queue_missing_metadata_task": "Metadata queue batch",
         "reset_stale_processing_task": "Recovery reset",
+        "reset_stale_preview_processing_task": "Preview stale reset",
     }
+
     task_runtime_rows = []
     for task_name, label in runtime_labels.items():
         metric = latest_metric_by_task.get(task_name)
@@ -456,38 +532,75 @@ def ui_home(request):
             }
         )
 
-    return render(
-        request,
-        "indexer/ui_home.html",
-        {
-            "total_files": total_files,
-            "indexed": indexed,
-            "exact_duplicate_groups": getattr(stats, "duplicate_groups", 0) or 0,
-            "exact_duplicate_file_count": getattr(stats, "duplicate_items", 0) or 0,
-            "text_quality": text_quality,
-            "graph_rows": graph_rows,
-            "mount_health": mount_health,
-            "missing_ok_previews": 0,
-            "preview_error_buckets": [],
-            "system_signals": system_signals,
-            "unsupported_ext_buckets": [],
-            "scan_queue": {},
-            "preview_queue": {},
-            "queue_summary": queue_summary,
-            "text_queue": {},
-            "metadata_queue": {},
-            "embedding_queue": {},
-            "stuck_processing": {},
-            "top_errors": [],
-            "task_runtime_rows": task_runtime_rows,
-            "worst_folders": worst_folders,
-            "stats_updated_at": getattr(stats, "updated_at", None),
-            "queue_snapshot_updated_at": getattr(queue_snapshot, "updated_at", None),
-        },
+    recent_preview_qs = (
+        Image.objects
+        .filter(preview_status=PreviewStatus.OK)
+        .order_by("-updated_at")[:5]
     )
 
-    cache.set(cache_key, response, 30)  # 30 seconds
+    recent_previews = []
+    for img in recent_preview_qs:
+        recent_previews.append(
+            {
+                "id": img.id,
+                "filename": getattr(img, "filename", "") or "",
+                "updated_at": getattr(img, "updated_at", None),
+                "preview_status": getattr(img, "preview_status", ""),
+                "preview_url": _get_preview_url(img),
+                "path": getattr(img, "path", "") or "",
+            }
+        )
 
+    try:
+        mount_health = get_mount_health()
+    except Exception:
+        mount_health = {
+            "path": "",
+            "exists": False,
+            "readable": False,
+            "writable": False,
+            "healthy": False,
+        }
+
+    stats_updated_at = getattr(stats, "updated_at", None)
+    queue_snapshot_updated_at = getattr(queue_snapshot, "updated_at", None)
+
+    system_signals = {
+        "missing_previews": 0,
+        "mount_ok": mount_health.get("healthy", False),
+        "stats_stale_minutes": _age_minutes(stats_updated_at),
+        "queue_stale_minutes": _age_minutes(queue_snapshot_updated_at),
+    }
+
+    context = {
+        "total_files": total_files,
+        "indexed": indexed,
+        "exact_duplicate_groups": stats.duplicate_groups or 0,
+        "exact_duplicate_file_count": stats.duplicate_items or 0,
+        "text_quality": text_quality,
+        "graph_rows": graph_rows,
+        "mount_health": mount_health,
+        "missing_ok_previews": 0,
+        "preview_error_buckets": [],
+        "system_signals": system_signals,
+        "unsupported_ext_buckets": [],
+        "scan_queue": scan_queue,
+        "preview_queue": preview_queue,
+        "queue_summary": queue_summary,
+        "text_queue": text_queue,
+        "metadata_queue": metadata_queue,
+        "embedding_queue": embedding_queue,
+        "stuck_processing": stuck_processing,
+        "top_errors": [],
+        "task_runtime_rows": task_runtime_rows,
+        "worst_folders": worst_folders,
+        "stats_updated_at": stats_updated_at,
+        "queue_snapshot_updated_at": queue_snapshot_updated_at,
+        "recent_previews": recent_previews,
+    }
+
+    response = render(request, "indexer/ui_home.html", context)
+    cache.set(cache_key, response, 30)
     return response
 
 
@@ -577,9 +690,6 @@ def ui_search(request):
 
         return filter_images_to_folder_scope(hydrated, search_folder)
 
-    # -------------------------
-    # Similar image search (upload)
-    # -------------------------
     if request.method == "POST" and request.FILES.get("image"):
         mode = "similar"
         limit = int(request.POST.get("limit") or limit)
@@ -588,23 +698,14 @@ def ui_search(request):
         hits = qdrant_search(vec, limit=limit)
         results = hydrate_hits(hits)
 
-    # -------------------------
-    # Semantic text search
-    # -------------------------
     elif q and mode == "semantic":
         hits = search_text(q, limit=limit, folder=search_folder)
         results = hydrate_hits(hits)
 
-    # -------------------------
-    # Hybrid search
-    # -------------------------
     elif q and mode == "hybrid":
         hits = hybrid_search(q, limit=limit, folder=search_folder)
         results = hydrate_hits(hits)
 
-    # -------------------------
-    # Similar search from existing indexed item
-    # -------------------------
     elif mode == "similar_existing":
         source = get_object_or_404(
             Image.objects.select_related("root"),
@@ -620,9 +721,6 @@ def ui_search(request):
             hits = qdrant_search(vector, limit=limit)
             results = hydrate_hits(hits, exclude_id=source.id)
 
-    # -------------------------
-    # Find duplicates
-    # -------------------------
     elif mode == "duplicates":
         source = get_object_or_404(
             Image.objects.select_related("root"),
@@ -636,9 +734,6 @@ def ui_search(request):
         hits = find_near_duplicates(str(source.id), limit=limit)
         results = hydrate_hits(hits)
 
-    # -------------------------
-    # Visual cluster
-    # -------------------------
     elif mode == "cluster":
         source = get_object_or_404(
             Image.objects.select_related("root"),
@@ -652,17 +747,11 @@ def ui_search(request):
         hits = get_visual_cluster(str(source.id), limit=limit)
         results = hydrate_hits(hits)
 
-    # -------------------------
-    # Search folders
-    # -------------------------
     elif mode == "folder":
         path = (request.GET.get("path") or "").strip()
         hits = search_by_folder(path, limit=limit, folder=search_folder)
         results = hydrate_hits(hits)
 
-    # -------------------------
-    # DB search
-    # -------------------------
     elif q and mode == "db":
         qs = Image.objects.select_related("root")
 
@@ -684,9 +773,6 @@ def ui_search(request):
 
         results = list(qs.order_by("-created")[:limit])
 
-    # -------------------------
-    # Match reason labels
-    # -------------------------
     results = apply_match_reasons(results, q, mode)
 
     ctx = {
@@ -823,9 +909,9 @@ def ui_status(request):
     skipped_images = Image.objects.filter(skip_index=True).count()
 
     preview_ready_qs = Image.objects.filter(
-        Q(preview_status="ok") |
-        Q(preview_path__isnull=False, preview_path__gt="") |
-        Q(thumb_path__isnull=False, thumb_path__gt="")
+        models.Q(preview_status="ok") |
+        models.Q(preview_path__isnull=False, preview_path__gt="") |
+        models.Q(thumb_path__isnull=False, thumb_path__gt="")
     )
     preview_ready = preview_ready_qs.distinct().count()
     pending_previews = Image.objects.filter(preview_status="pending").count()
@@ -883,9 +969,9 @@ def ui_status(request):
     }
     return render(request, "indexer/ui_status.html", ctx)
 
+
 @login_required
 def ui_similar(request, image_id):
-
     img = get_object_or_404(Image, id=image_id)
 
     ctx = {
@@ -893,6 +979,7 @@ def ui_similar(request, image_id):
     }
 
     return render(request, "indexer/ui_similar.html", ctx)
+
 
 @login_required
 def ui_retry_preview(request, image_id):
@@ -912,6 +999,7 @@ def ui_retry_index(request, image_id):
     img.save(update_fields=["embedding_status", "embedding_error"])
     embed_image_task.delay(str(img.id))
     return HttpResponseRedirect(request.META.get("HTTP_REFERER", "/ui/health/"))
+
 
 @login_required
 def ui_requeue_text(request):
@@ -938,6 +1026,7 @@ def ui_requeue_embedding(request):
         embedding_error="",
     )
     return HttpResponseRedirect("/ui/")
+
 
 @login_required
 def ui_health(request):
@@ -972,6 +1061,7 @@ def ui_health(request):
     }
 
     return render(request, "indexer/ui_health.html", ctx)
+
 
 @login_required
 @require_POST
@@ -1008,6 +1098,7 @@ def ui_requeue_stage(request, stage):
     log("admin", f"Bulk requeue stage={stage} count={count}", "WARNING")
 
     return HttpResponseRedirect(request.META.get("HTTP_REFERER", "/ui/"))
+
 
 @login_required
 def ui_browse_root(request):
@@ -1060,12 +1151,12 @@ def ui_browse_folder(request, folder_id):
 
     open_links = _open_folder_links_for_folder(folder)
 
-    duplicate_images = Image.objects.filter(folder=folder).exclude(duplicate_group__isnull=True).exclude(duplicate_group="")
-    clustered_images = Image.objects.filter(folder=folder).exclude(visual_cluster_id__isnull=True).exclude(visual_cluster_id="")
+    duplicate_images = Image.objects.filter(folder=folder).exclude(duplicate_group__isnull=True).exclude(duplicate_group__exact="")
+    clustered_images = Image.objects.filter(folder=folder).exclude(visual_cluster_id__isnull=True).exclude(visual_cluster_id__exact="")
 
-    if not request.user.is_superuser and allowed:
-        duplicate_images = duplicate_images.filter(root_id__in=allowed)
-        clustered_images = clustered_images.filter(root_id__in=allowed)
+    if not request.user.is_superuser:
+        duplicate_images = duplicate_images.filter(root_id__in=allowed_root_ids)
+        clustered_images = clustered_images.filter(root_id__in=allowed_root_ids)
 
     duplicate_count = duplicate_images.count()
     clustered_count = clustered_images.count()
@@ -1085,6 +1176,7 @@ def ui_browse_folder(request, folder_id):
             "clustered_count": clustered_count,
         },
     )
+
 
 @login_required
 def ui_jobs(request):
@@ -1161,6 +1253,7 @@ def ui_job_detail(request, job_number):
         },
     )
 
+
 @login_required
 def ui_customers(request):
     allowed = _allowed_root_ids(request.user)
@@ -1236,6 +1329,7 @@ def ui_customer_detail(request, customer_name):
         },
     )
 
+
 @login_required
 def ui_duplicates(request):
     allowed = _allowed_root_ids(request.user)
@@ -1276,8 +1370,7 @@ def ui_duplicates(request):
     }
 
     for row in group_rows:
-        sample = sample_images.get(row["duplicate_group"])
-        row["sample"] = sample
+        row["sample"] = sample_images.get(row["duplicate_group"])
 
     page_obj = Paginator(group_rows, 50).get_page(request.GET.get("page"))
 
@@ -1342,6 +1435,7 @@ def ui_duplicate_group(request, group_id):
             "total_count": images_qs.count(),
         },
     )
+
 
 @login_required
 def ui_clusters(request):
@@ -1442,6 +1536,7 @@ def ui_cluster_detail(request, cluster_id):
             "total_count": images_qs.count(),
         },
     )
+
 
 @login_required
 def ui_folder_health(request):
@@ -1594,6 +1689,7 @@ def ui_folder_health(request):
         },
     )
 
+
 @login_required
 def ui_folder_issue_detail(request, folder_id, issue):
     allowed = _allowed_root_ids(request.user)
@@ -1662,6 +1758,7 @@ def ui_folder_issue_detail(request, folder_id, issue):
         ctx,
     )
 
+
 @require_POST
 def ui_requeue_stage_bulk(request, stage):
     qs = Image.objects.all()
@@ -1695,6 +1792,7 @@ def ui_requeue_stage_bulk(request, stage):
 
     return redirect("ui_home_alt")
 
+
 def landing(request):
     if request.user.is_authenticated:
         return redirect("ui_home")
@@ -1717,9 +1815,9 @@ def login_view(request):
             login(request, user)
 
             if remember_me:
-                request.session.set_expiry(60 * 60 * 24 * 30)  # 30 days
+                request.session.set_expiry(60 * 60 * 24 * 30)
             else:
-                request.session.set_expiry(0)  # browser session only
+                request.session.set_expiry(0)
 
             return redirect(next_url)
 
