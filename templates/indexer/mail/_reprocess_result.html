@@ -1,0 +1,4 @@
+<div>
+  <button class="btn btn-outline-primary btn-sm" hx-post="{% url 'email_reprocess_documents' email_obj.id %}" hx-target="#reprocess-result" hx-swap="innerHTML">Reprocess linked docs</button>
+  <div class="small text-success mt-2">Queued {{ queued }} document{{ queued|pluralize }}.</div>
+</div>

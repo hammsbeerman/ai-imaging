@@ -1,0 +1,58 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Email Inbox · AI Image Catalog{% endblock %}
+{% block page_title %}Email Inbox{% endblock %}
+{% block page_meta %}IMAP-fed document intake and attachment review.{% endblock %}
+
+{% block content %}
+<div class="page-card p-3 p-lg-4">
+  <form method="get" class="mb-3">
+    <div class="row g-2">
+      <div class="col-lg-5">
+        <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Search subject, sender, body...">
+      </div>
+      <div class="col-lg-3">
+        <select name="status" class="form-select">
+          <option value="">All statuses</option>
+          <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+          <option value="processed" {% if status_filter == 'processed' %}selected{% endif %}>Processed</option>
+          <option value="error" {% if status_filter == 'error' %}selected{% endif %}>Error</option>
+        </select>
+      </div>
+      <div class="col-lg-2"><button class="btn btn-primary w-100" type="submit">Filter</button></div>
+      <div class="col-lg-2"><a href="{% url 'email_inbox' %}" class="btn btn-outline-secondary w-100">Reset</a></div>
+    </div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Received</th>
+          <th>From</th>
+          <th>Subject</th>
+          <th>Status</th>
+          <th>Attachments</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in emails %}
+        <tr>
+          <td>{{ e.id }}</td>
+          <td>{{ e.received_at|default:e.created_at }}</td>
+          <td>{% if e.from_name %}{{ e.from_name }}<br>{% endif %}<span class="text-muted small">{{ e.from_email }}</span></td>
+          <td><a href="{% url 'email_detail' e.id %}">{{ e.subject|default:"(no subject)" }}</a></td>
+          <td>
+            <span class="badge {% if e.status == 'processed' %}text-bg-success{% elif e.status == 'error' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ e.status }}</span>
+          </td>
+          <td>{{ e.attachments.count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-muted">No emails found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

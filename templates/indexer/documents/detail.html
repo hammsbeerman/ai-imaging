@@ -1,0 +1,130 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Document Detail · AI Image Catalog{% endblock %}
+{% block page_title %}Document Detail{% endblock %}
+{% block page_meta %}{{ doc.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <div class="col-xl-4">
+    <div class="page-card p-3 p-lg-4 mb-4">
+      <div class="d-flex justify-content-between align-items-start gap-2 mb-3">
+        <div>
+          <h4 class="mb-1">{{ doc.original_filename }}</h4>
+          <div id="review-badge">{% include "indexer/documents/_review_badge.html" with doc=doc %}</div>
+        </div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-success btn-sm" hx-post="{% url 'document_approve' doc.id %}" hx-target="#review-badge" hx-swap="innerHTML">Approve</button>
+          <button class="btn btn-warning btn-sm" hx-post="{% url 'document_needs_review' doc.id %}" hx-target="#review-badge" hx-swap="innerHTML">Needs review</button>
+        </div>
+      </div>
+
+      {% if doc.is_duplicate and doc.duplicate_group %}
+        <div class="alert alert-warning py-2">
+          Duplicate detected.
+          <a href="{% url 'document_inbox' %}?dup_group={{ doc.duplicate_group|urlencode }}">View others in this group</a>
+        </div>
+      {% endif %}
+
+      {% if dup_docs %}
+        <div class="mb-3">
+          <div class="small text-muted mb-2">Other duplicates</div>
+          <div class="list-group list-group-flush small">
+            {% for other in dup_docs %}
+              <a class="list-group-item list-group-item-action px-0" href="{% url 'document_detail' other.id %}">
+                {{ other.original_filename }}
+              </a>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div id="edit-panel">{% include "indexer/documents/_edit_panel.html" with doc=doc form=form %}</div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="page-card p-3 p-lg-4 mb-4">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <h5>Preview</h5>
+          {% if doc.image.preview_path %}
+            <img src="/media/{{ doc.image.preview_path }}" alt="{{ doc.original_filename }}" class="preview-lg mb-3">
+          {% else %}
+            <div class="text-muted small mb-3">No preview available yet.</div>
+          {% endif %}
+        </div>
+        <div class="col-lg-6">
+          <h5>Document Info</h5>
+          <div class="small">
+            <div><strong>Type:</strong> {{ doc.document_type|default:"unknown" }}</div>
+            <div><strong>Vendor:</strong> {{ doc.invoice_vendor|default:"—" }}</div>
+            <div><strong>Invoice #:</strong> {{ doc.invoice_number|default:"—" }}</div>
+            <div><strong>Total:</strong> {{ doc.invoice_total|default:"—" }}</div>
+            <div><strong>Due Date:</strong> {{ doc.invoice_due_date|default:"—" }}</div>
+            <div><strong>Confidence:</strong> {{ doc.confidence_score }}</div>
+            <div><strong>Text Source:</strong> {{ doc.text_source|default:"—" }}</div>
+            <div><strong>Text Engine:</strong> {{ doc.text_engine|default:"—" }}</div>
+            <div><strong>Source Path:</strong> <span class="mono">{{ doc.source_path }}</span></div>
+          </div>
+
+          {% if doc.email_attachments.all %}
+            <div class="mt-3 small">
+              <div class="text-muted mb-1">Related emails</div>
+              {% for att in doc.email_attachments.all %}
+                <div>
+                  <a href="{% url 'email_detail' att.email.id %}">{{ att.email.subject|default:"(no subject)" }}</a>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div class="mt-3" id="doc-reprocess-result">
+            <button class="btn btn-outline-primary btn-sm" hx-post="{% url 'document_reprocess' doc.id %}" hx-target="#doc-reprocess-result" hx-swap="innerHTML">Reprocess</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-card p-3 p-lg-4 mb-4">
+      <h5>Extracted Signals</h5>
+      <div class="small mb-3">
+        <div><strong>Emails:</strong> {{ doc.detected_emails|default:"[]" }}</div>
+        <div><strong>Phones:</strong> {{ doc.detected_phones|default:"[]" }}</div>
+        <div><strong>Dates:</strong> {{ doc.detected_dates|default:"[]" }}</div>
+        <div><strong>Money:</strong> {{ doc.detected_money|default:"[]" }}</div>
+      </div>
+
+      <h5>Summary</h5>
+      <p class="small">{{ doc.extracted_text_summary|default:"No extracted summary yet." }}</p>
+
+      <h5>Text</h5>
+      <pre class="small" style="white-space: pre-wrap;">{{ doc.extracted_text_clean|default:"No extracted text yet." }}</pre>
+    </div>
+
+    <div class="page-card p-3 p-lg-4">
+      <h5 class="mb-3">Pages</h5>
+      {% if doc.pages.all %}
+        <div class="accordion" id="page-accordion">
+          {% for page in doc.pages.all %}
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="heading-{{ page.id }}">
+              <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ page.id }}">
+                Page {{ page.page_number }}
+              </button>
+            </h2>
+            <div id="collapse-{{ page.id }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" data-bs-parent="#page-accordion">
+              <div class="accordion-body">
+                <pre class="small" style="white-space: pre-wrap;">{{ page.extracted_text_clean|default:page.text_raw }}</pre>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="text-muted small">No page records yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

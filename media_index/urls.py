@@ -38,6 +38,19 @@ from indexer.ui_views import (
     ui_similar,
     ui_status,
 )
+from indexer.views_documents import (
+    document_approve,
+    document_detail,
+    document_inbox,
+    document_needs_review,
+    document_quick_edit,
+    document_reprocess,
+)
+from indexer.views_mail import (
+    email_detail,
+    email_inbox,
+    email_reprocess_documents,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -70,6 +83,17 @@ urlpatterns = [
     path("ui/clusters/<str:cluster_id>/", ui_cluster_detail, name="ui_cluster_detail"),
     path("ui/health/folders/", ui_folder_health, name="ui_folder_health"),
     path("ui/health/folders/<int:folder_id>/<str:issue_code>/", ui_folder_issue_detail, name="ui_folder_issue_detail"),
+
+    # Document + email UI
+    path("ui/documents/", document_inbox, name="document_inbox"),
+    path("ui/documents/<int:pk>/", document_detail, name="document_detail"),
+    path("ui/documents/<int:pk>/edit/", document_quick_edit, name="document_quick_edit"),
+    path("ui/documents/<int:pk>/approve/", document_approve, name="document_approve"),
+    path("ui/documents/<int:pk>/needs-review/", document_needs_review, name="document_needs_review"),
+    path("ui/documents/<int:pk>/reprocess/", document_reprocess, name="document_reprocess"),
+    path("ui/mail/", email_inbox, name="email_inbox"),
+    path("ui/mail/<int:pk>/", email_detail, name="email_detail"),
+    path("ui/mail/<int:pk>/reprocess-documents/", email_reprocess_documents, name="email_reprocess_documents"),
 
     # API
     path("api/health/summary/", api_health_summary, name="api_health_summary"),

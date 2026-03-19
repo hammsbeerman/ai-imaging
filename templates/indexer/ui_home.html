@@ -19,67 +19,44 @@
     </div>
   </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Total files</div>
-        <div class="fs-3 fw-semibold">{{ total_files|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Preview complete</div>
-        <div class="fs-3 fw-semibold">{{ preview_complete|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Text complete</div>
-        <div class="fs-3 fw-semibold">{{ text_complete|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Metadata complete</div>
-        <div class="fs-3 fw-semibold">{{ metadata_complete|default:0 }}</div>
-      </div>
-    </div>
+  
   </div>
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Indexed</div>
-        <div class="fs-4 fw-semibold">{{ indexed_files|default:0 }}</div>
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong>Documents</strong>
+      <a href="{% url 'document_inbox' %}" class="btn btn-sm btn-outline-primary">Open inbox</a>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small">Pending</div>
+            <div class="fs-4 fw-semibold">{{ doc_stats.pending|default:0 }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small">Approved</div>
+            <div class="fs-4 fw-semibold">{{ doc_stats.approved|default:0 }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small">Errors</div>
+            <div class="fs-4 fw-semibold">{{ doc_stats.errors|default:0 }}</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100">
+            <div class="text-muted small">Duplicates</div>
+            <div class="fs-4 fw-semibold">{{ doc_stats.duplicates|default:0 }}</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Duplicate groups</div>
-        <div class="fs-4 fw-semibold">{{ duplicate_groups|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Duplicate items</div>
-        <div class="fs-4 fw-semibold">{{ duplicate_items|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-</div>
 
   <div class="row g-3 mb-4">
     <div class="col-lg-8">

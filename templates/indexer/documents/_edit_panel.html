@@ -1,0 +1,16 @@
+<div class="page-card p-3 p-lg-4">
+  <h5>Quick Edit</h5>
+  {% if saved %}<div class="alert alert-success py-2">Saved.</div>{% endif %}
+  <form hx-post="{% url 'document_quick_edit' doc.id %}" hx-target="#edit-panel" hx-swap="innerHTML">
+    {% csrf_token %}
+    <div class="mb-2"><label class="form-label">Title</label>{{ form.title }}</div>
+    <div class="mb-2"><label class="form-label">Document Type</label>{{ form.document_type }}</div>
+    <div class="mb-2"><label class="form-label">Correspondent</label>{{ form.correspondent }}</div>
+    <div class="mb-2"><label class="form-label">Vendor</label>{{ form.invoice_vendor }}</div>
+    <div class="mb-2"><label class="form-label">Invoice #</label>{{ form.invoice_number }}</div>
+    <div class="mb-2"><label class="form-label">Total</label>{{ form.invoice_total }}</div>
+    <div class="mb-2"><label class="form-label">Due Date</label>{{ form.invoice_due_date }}</div>
+    <div class="mb-3"><label class="form-label">Review Status</label>{{ form.review_status }}</div>
+    <button class="btn btn-primary btn-sm" type="submit">Save</button>
+  </form>
+</div>

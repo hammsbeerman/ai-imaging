@@ -516,3 +516,8 @@ class TaskRunMetric(models.Model):
 
     def __str__(self):
         return f"{self.task_name} [{self.scope}] {self.status} {self.duration_ms}ms"
+
+
+# Additional document/email models
+from .models_documents import *  # noqa
+from .models_mail import *  # noqa

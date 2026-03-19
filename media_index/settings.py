@@ -139,6 +139,12 @@ MEDIA_ROOT = os.getenv("MEDIA_ROOT", str(BASE_DIR / "media"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+IMAP_HOST = os.getenv("IMAP_HOST", "")
+IMAP_PORT = int(os.getenv("IMAP_PORT", "993"))
+IMAP_USERNAME = os.getenv("IMAP_USERNAME", "")
+IMAP_PASSWORD = os.getenv("IMAP_PASSWORD", "")
+IMAP_MAILBOX = os.getenv("IMAP_MAILBOX", "INBOX")
+IMAP_USE_SSL = env_bool("IMAP_USE_SSL", default=True)
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/1")
@@ -169,25 +175,25 @@ CELERY_BEAT_SCHEDULE = {
         "task": "indexer.tasks_text.queue_missing_text_task",
         "schedule": 60.0,
         "args": (1000,),
-        "options": {"queue": "control", "routing_key": "control"},
+        "options": {"queue": "ops"},
     },
     "queue-embeddings-every-60-sec": {
         "task": "indexer.tasks_embedding.queue_missing_embeddings_task",
         "schedule": 60.0,
         "args": (256, 16),
-        "options": {"queue": "control", "routing_key": "control"},
+        "options": {"queue": "ops"},
     },
     "queue-metadata-every-120-sec": {
         "task": "indexer.tasks_metadata.queue_missing_metadata_task",
         "schedule": 120.0,
         "args": (512, 32),
-        "options": {"queue": "control", "routing_key": "control"},
+        "options": {"queue": "ops"},
     },
     "queue-dedupe-every-90-sec": {
         "task": "indexer.tasks_dedupe.queue_missing_dedupe_task",
         "schedule": 90.0,
         "args": (500,),
-        "options": {"queue": "control", "routing_key": "control"},
+        "options": {"queue": "ops", "routing_key": "ops"},
     },
     "repair-missing-previews-every-5-min": {
         "task": "indexer.tasks_preview_repair.repair_missing_previews_task",
@@ -205,11 +211,11 @@ CELERY_BEAT_SCHEDULE = {
         "args": (45,),
         "options": {"queue": "ops"},
     },
-        "reset-stuck-processing-every-10-min": {
+    "reset-stuck-processing-every-10-min": {
         "task": "indexer.tasks_recovery.reset_stale_processing_task",
         "schedule": 300.0,
         "args": (45,),
-        "options": {"queue": "control", "routing_key": "control"},
+        "options": {"queue": "metadata"},
     },
     "rebuild_archive_stats": {
         "task": "indexer.tasks_stats.rebuild_archive_stats_task",
@@ -224,46 +230,53 @@ CELERY_BEAT_SCHEDULE = {
         "task": "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task",
         "schedule": 300.0,
     },
+    "queue-document-sync-every-90-sec": {
+        "task": "indexer.tasks_documents.queue_missing_document_sync_task",
+        "schedule": 90.0,
+        "args": (500, 50),
+        "options": {"queue": "ops"},
+    },
+    "fetch-imap-emails-every-5-min": {
+        "task": "indexer.tasks_mail.fetch_imap_emails",
+        "schedule": 300.0,
+        "options": {"queue": "ops"},
+    },
 }
 
 CELERY_TASK_ROUTES = {
     "indexer.tasks.scan_task": {"queue": "scan"},
 
-
     "indexer.tasks_preview.queue_missing_previews_task": {"queue": "preview"},
     "indexer.tasks_preview.process_preview_task": {"queue": "preview"},
     "indexer.tasks_preview.process_preview_batch_task": {"queue": "preview"},
     "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
-    "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
 
-
+    "indexer.tasks_text.queue_missing_text_task": {"queue": "ops"},
     "indexer.tasks_text.extract_text_task": {"queue": "text"},
+    "indexer.tasks_documents.queue_missing_document_sync_task": {"queue": "ops"},
+    "indexer.tasks_documents.sync_document_from_image_task": {"queue": "ops"},
+    "indexer.tasks_documents.reprocess_document_task": {"queue": "ops"},
+    "indexer.tasks_mail.fetch_imap_emails": {"queue": "ops"},
+    "indexer.tasks_mail.relink_email_documents_task": {"queue": "ops"},
 
-
-    "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "control"},
-    "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "control"},
-    "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "control"},
-    "indexer.tasks_text.queue_missing_text_task": {"queue": "control"},
-    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "control"},
-
-    
+    "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "ops"},
     "indexer.tasks_embedding.embed_image_task": {"queue": "embedding"},
     "indexer.tasks_embedding.process_embedding_batch_task": {"queue": "embedding"},
 
-    
+    "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "ops"},
     "indexer.tasks_metadata.extract_metadata_task": {"queue": "metadata"},
     "indexer.tasks_metadata.process_metadata_batch_task": {"queue": "metadata"},
+
+    "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "ops"},
     "indexer.tasks_dedupe.dedupe_image_task": {"queue": "metadata"},
     "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
-    
-    
 
     "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "ops"},
     "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "ops"},
     "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "ops"},
 
-    
-    
+    "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
+    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "ops"},
 }
 
 INDEX_PREVIEW_ROOT = os.getenv("INDEX_PREVIEW_ROOT", "/mnt/ai-previews/development")

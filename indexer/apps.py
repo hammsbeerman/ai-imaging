@@ -11,3 +11,7 @@ class IndexerConfig(AppConfig):
             ensure_collection()
         except Exception:
             pass
+
+        # Ensure extra model modules are loaded by Django's app registry.
+        from indexer import models_documents  # noqa: F401
+        from indexer import models_mail  # noqa: F401

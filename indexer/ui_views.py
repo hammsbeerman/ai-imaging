@@ -71,6 +71,7 @@ from indexer.services.preview_health import (
     get_preview_drift,
     get_preview_drift_count,
 )
+from indexer.models_documents import Document
 
 
 def _allowed_root_ids(user) -> set[int]:
@@ -547,6 +548,13 @@ def ui_home(request):
             }
         )
 
+    doc_stats = {
+        "pending": Document.objects.filter(review_status=Document.REVIEW_PENDING).count(),
+        "approved": Document.objects.filter(review_status=Document.REVIEW_APPROVED).count(),
+        "errors": Document.objects.filter(sync_status=Document.SYNC_ERROR).count(),
+        "duplicates": Document.objects.filter(is_duplicate=True).count(),
+    }
+
     try:
         mount_health = get_mount_health()
     except Exception:
@@ -573,20 +581,30 @@ def ui_home(request):
         "indexed_files": stats.indexed_files or 0,
         "duplicate_groups": stats.duplicate_groups or 0,
         "duplicate_items": stats.duplicate_items or 0,
-        "preview_complete": stats.preview_ok or 0,
-        "text_complete": stats.text_ok or 0,
-        "metadata_complete": stats.metadata_ok or 0,
         "text_quality": text_quality,
         "graph_rows": graph_rows,
         "mount_health": mount_health,
+        "missing_ok_previews": 0,
+        "preview_error_buckets": [],
         "system_signals": system_signals,
+        "unsupported_ext_buckets": [],
+        "scan_queue": scan_queue,
+        "preview_queue": preview_queue,
         "queue_summary": queue_summary,
+        "text_queue": text_queue,
+        "metadata_queue": metadata_queue,
+        "embedding_queue": embedding_queue,
         "stuck_processing": stuck_processing,
+        "top_errors": [],
         "task_runtime_rows": task_runtime_rows,
         "worst_folders": worst_folders,
         "stats_updated_at": stats_updated_at,
         "queue_snapshot_updated_at": queue_snapshot_updated_at,
         "recent_previews": recent_previews,
+        "doc_stats": doc_stats,
+        "preview_complete": stats.preview_ok or 0,
+        "text_complete": stats.text_ok or 0,
+        "metadata_complete": stats.metadata_ok or 0,
     }
 
     return render(request, "indexer/ui_home.html", context)

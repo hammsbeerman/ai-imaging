@@ -1,0 +1,2 @@
+<span class="badge {% if doc.review_status == 'approved' %}text-bg-success{% elif doc.review_status == 'needs_review' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ doc.review_status }}</span>
+{% if doc.reviewed_by %}<div class="small text-muted mt-1">{{ doc.reviewed_by.username }}</div>{% endif %}

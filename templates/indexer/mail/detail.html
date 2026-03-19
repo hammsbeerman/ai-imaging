@@ -1,0 +1,63 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Email Detail · AI Image Catalog{% endblock %}
+{% block page_title %}Email Detail{% endblock %}
+{% block page_meta %}{{ email_obj.subject|default:"(no subject)" }}{% endblock %}
+
+{% block content %}
+<div class="page-card p-3 p-lg-4 mb-4">
+  <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+    <div>
+      <h4 class="mb-1">{{ email_obj.subject|default:"(no subject)" }}</h4>
+      <div class="small text-muted">From: {% if email_obj.from_name %}{{ email_obj.from_name }} {% endif %}{{ email_obj.from_email }}</div>
+      <div class="small text-muted">To: {{ email_obj.to_emails }}</div>
+      <div class="small text-muted">Received: {{ email_obj.received_at|default:email_obj.created_at }}</div>
+    </div>
+    <div id="reprocess-result">
+      <button class="btn btn-outline-primary btn-sm" hx-post="{% url 'email_reprocess_documents' email_obj.id %}" hx-target="#reprocess-result" hx-swap="innerHTML">Reprocess linked docs</button>
+    </div>
+  </div>
+
+  {% if email_obj.processing_error %}
+    <div class="alert alert-danger">{{ email_obj.processing_error }}</div>
+  {% endif %}
+
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <h5>Email Body</h5>
+      <pre class="small" style="white-space: pre-wrap;">{{ email_obj.body_text }}</pre>
+    </div>
+    <div class="col-lg-6">
+      <h5>Attachments</h5>
+      {% if email_obj.attachments.all %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Filename</th><th>Content Type</th><th>Linked Doc</th></tr></thead>
+          <tbody>
+            {% for att in email_obj.attachments.all %}
+            <tr>
+              <td>{{ att.filename }}<div class="small text-muted">{{ att.file_size }} bytes</div></td>
+              <td>{{ att.content_type }}</td>
+              <td>
+                {% if att.document %}
+                  <a href="{% url 'document_detail' att.document.id %}">Document #{{ att.document.id }}</a>
+                  <div class="small text-muted">{{ att.document.document_type }} / {{ att.document.review_status }}</div>
+                  <div class="mt-1">
+                    <a href="{% url 'document_detail' att.document.id %}" class="btn btn-sm btn-outline-primary">Open Document</a>
+                  </div>
+                {% else %}
+                  <span class="text-muted">Not linked yet</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="text-muted small">No attachments.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}Documents · AI Image Catalog{% endblock %}
+{% block page_title %}Documents{% endblock %}
+{% block page_meta %}OCR-backed document review built on top of the existing image pipeline.{% endblock %}
+
+{% block content %}
+<div class="page-card p-3 p-lg-4">
+  <form method="get" class="mb-3">
+    <div class="row g-2">
+      <div class="col-lg-5">
+        <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Search filename, text, vendor, invoice #...">
+      </div>
+      <div class="col-lg-3">
+        <button class="btn btn-primary w-100" type="submit">Search</button>
+      </div>
+      <div class="col-lg-4 text-lg-end">
+        <div class="small text-muted mt-2 mt-lg-0">{{ documents|length }} result{{ documents|length|pluralize }}</div>
+      </div>
+    </div>
+  </form>
+
+  <div class="mb-3 small">
+    <a href="?filter=pending{% if q %}&q={{ q|urlencode }}{% endif %}">Pending</a> |
+    <a href="?filter=approved{% if q %}&q={{ q|urlencode }}{% endif %}">Approved</a> |
+    <a href="?filter=invoices{% if q %}&q={{ q|urlencode }}{% endif %}">Invoices</a> |
+    <a href="?filter=duplicates{% if q %}&q={{ q|urlencode }}{% endif %}">Duplicates</a> |
+    <a href="?filter=errors{% if q %}&q={{ q|urlencode }}{% endif %}">Errors</a> |
+    <a href="{% url 'document_inbox' %}">Reset</a>
+    {% if dup_group %}
+      <span class="text-muted"> · Showing duplicate group {{ dup_group }}</span>
+    {% endif %}
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>File</th>
+          <th>Type</th>
+          <th>Vendor</th>
+          <th>Total</th>
+          <th>Confidence</th>
+          <th>Review</th>
+          <th>Sync</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in documents %}
+        <tr>
+          <td>{{ d.id }}</td>
+          <td>
+            <a href="{% url 'document_detail' d.id %}">{{ d.original_filename }}</a>
+            <div class="small text-muted mono">{{ d.file_ext }}{% if d.page_count %} · {{ d.page_count }} page{{ d.page_count|pluralize }}{% endif %}</div>
+            {% if d.is_duplicate and d.duplicate_group %}
+              <div class="small"><a href="{% url 'document_inbox' %}?dup_group={{ d.duplicate_group|urlencode }}">View duplicate set</a></div>
+            {% endif %}
+          </td>
+          <td>{{ d.document_type|default:"unknown" }}</td>
+          <td>{{ d.invoice_vendor|default:"—" }}</td>
+          <td>{{ d.invoice_total|default:"—" }}</td>
+          <td>{{ d.confidence_score }}</td>
+          <td>{% include "indexer/documents/_review_badge.html" with doc=d %}</td>
+          <td>
+            {% if d.sync_status == 'error' %}
+              <span class="badge text-bg-danger">error</span>
+            {% elif d.sync_status == 'ok' %}
+              <span class="badge text-bg-success">ok</span>
+            {% else %}
+              <span class="badge text-bg-secondary">{{ d.sync_status }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-muted">No documents found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
