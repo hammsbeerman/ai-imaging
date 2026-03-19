@@ -163,7 +163,7 @@ CELERY_BEAT_SCHEDULE = {
         "task": "indexer.tasks.scan_task",
         "schedule": 100.0,
         "args": (),
-        "options": {"queue": "scan"},
+        "options": {"queue": "scan", "routing_key": "scan"},
     },
     "queue-previews-every-30-sec": {
         "task": "indexer.tasks_preview.queue_missing_previews_task",
@@ -175,108 +175,124 @@ CELERY_BEAT_SCHEDULE = {
         "task": "indexer.tasks_text.queue_missing_text_task",
         "schedule": 60.0,
         "args": (1000,),
-        "options": {"queue": "ops"},
+        "options": {"queue": "ocr", "routing_key": "ocr"},
     },
     "queue-embeddings-every-60-sec": {
         "task": "indexer.tasks_embedding.queue_missing_embeddings_task",
         "schedule": 60.0,
         "args": (256, 16),
-        "options": {"queue": "ops"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "queue-metadata-every-120-sec": {
         "task": "indexer.tasks_metadata.queue_missing_metadata_task",
         "schedule": 120.0,
         "args": (512, 32),
-        "options": {"queue": "ops"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "queue-dedupe-every-90-sec": {
         "task": "indexer.tasks_dedupe.queue_missing_dedupe_task",
         "schedule": 90.0,
         "args": (500,),
-        "options": {"queue": "ops", "routing_key": "ops"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "repair-missing-previews-every-5-min": {
         "task": "indexer.tasks_preview_repair.repair_missing_previews_task",
         "schedule": 300.0,
         "args": (500,),
+        "options": {"queue": "preview", "routing_key": "preview"},
     },
     "repair-missing-previews-every-30-min": {
         "task": "indexer.tasks_preview.repair_missing_previews_task",
         "schedule": 1800.0,
         "args": (500,),
+        "options": {"queue": "preview", "routing_key": "preview"},
     },
     "reset-stuck-preview-every-10-min": {
         "task": "indexer.tasks_recovery.reset_stale_preview_processing_task",
         "schedule": 600.0,
         "args": (45,),
-        "options": {"queue": "ops"},
+        "options": {"queue": "preview", "routing_key": "preview"},
     },
     "reset-stuck-processing-every-10-min": {
         "task": "indexer.tasks_recovery.reset_stale_processing_task",
         "schedule": 300.0,
         "args": (45,),
-        "options": {"queue": "metadata"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "rebuild_archive_stats": {
         "task": "indexer.tasks_stats.rebuild_archive_stats_task",
         "schedule": 240.0,
+        "options": {"queue": "ops", "routing_key": "ops"},
     },
     "rebuild_queue_health_snapshot": {
         "task": "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task",
         "schedule": 240.0,
         "args": (45,),
+        "options": {"queue": "ops", "routing_key": "ops"},
     },
     "rebuild_folder_health_snapshot": {
         "task": "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task",
         "schedule": 300.0,
+        "options": {"queue": "ops", "routing_key": "ops"},
     },
     "queue-document-sync-every-90-sec": {
         "task": "indexer.tasks_documents.queue_missing_document_sync_task",
         "schedule": 90.0,
         "args": (500, 50),
-        "options": {"queue": "ops"},
+        "options": {"queue": "ocr", "routing_key": "ocr"},
     },
     "fetch-imap-emails-every-5-min": {
         "task": "indexer.tasks_mail.fetch_imap_emails",
         "schedule": 300.0,
-        "options": {"queue": "ops"},
+        "options": {"queue": "mail", "routing_key": "mail"},
     },
 }
 
 CELERY_TASK_ROUTES = {
     "indexer.tasks.scan_task": {"queue": "scan"},
 
-    "indexer.tasks_preview.queue_missing_previews_task": {"queue": "preview"},
-    "indexer.tasks_preview.process_preview_task": {"queue": "preview"},
-    "indexer.tasks_preview.process_preview_batch_task": {"queue": "preview"},
-    "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
 
-    "indexer.tasks_text.queue_missing_text_task": {"queue": "ops"},
-    "indexer.tasks_text.extract_text_task": {"queue": "text"},
-    "indexer.tasks_documents.queue_missing_document_sync_task": {"queue": "ops"},
-    "indexer.tasks_documents.sync_document_from_image_task": {"queue": "ops"},
-    "indexer.tasks_documents.reprocess_document_task": {"queue": "ops"},
-    "indexer.tasks_mail.fetch_imap_emails": {"queue": "ops"},
-    "indexer.tasks_mail.relink_email_documents_task": {"queue": "ops"},
-
-    "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "ops"},
-    "indexer.tasks_embedding.embed_image_task": {"queue": "embedding"},
-    "indexer.tasks_embedding.process_embedding_batch_task": {"queue": "embedding"},
-
-    "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "ops"},
-    "indexer.tasks_metadata.extract_metadata_task": {"queue": "metadata"},
-    "indexer.tasks_metadata.process_metadata_batch_task": {"queue": "metadata"},
-
-    "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "ops"},
-    "indexer.tasks_dedupe.dedupe_image_task": {"queue": "metadata"},
-    "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
 
     "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "ops"},
     "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "ops"},
     "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "ops"},
 
+
+    "indexer.tasks_documents.queue_missing_document_sync_task": {"queue": "ocr"},
+    "indexer.tasks_documents.sync_document_from_image_task": {"queue": "ocr"},
+    "indexer.tasks_documents.reprocess_document_task": {"queue": "ocr"},
+    "indexer.tasks_text.queue_missing_text_task": {"queue": "ocr"},
+    
+    "indexer.tasks_text.extract_text_task": {"queue": "text"},
+    
+    "indexer.tasks_mail.fetch_imap_emails": {"queue": "mail"},
+    "indexer.tasks_mail.relink_email_documents_task": {"queue": "mail"},
+
+    
+    
+    "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "control"},
+    "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "control"},
+    "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "control"},
+    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "control"},
+
+    "indexer.tasks_preview.queue_missing_previews_task": {"queue": "preview"},
+    "indexer.tasks_preview.process_preview_task": {"queue": "preview"},
+    "indexer.tasks_preview.process_preview_batch_task": {"queue": "preview"},
+    "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
     "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
-    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "ops"},
+
+    
+
+    "indexer.tasks_embedding.embed_image_task": {"queue": "embedding"},
+    "indexer.tasks_embedding.process_embedding_batch_task": {"queue": "embedding"},
+
+    "indexer.tasks_metadata.extract_metadata_task": {"queue": "metadata"},
+    "indexer.tasks_metadata.process_metadata_batch_task": {"queue": "metadata"},
+    "indexer.tasks_dedupe.dedupe_image_task": {"queue": "metadata"},
+    "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
+
+
+
 }
 
 INDEX_PREVIEW_ROOT = os.getenv("INDEX_PREVIEW_ROOT", "/mnt/ai-previews/development")
