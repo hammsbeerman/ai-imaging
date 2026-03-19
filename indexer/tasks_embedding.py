@@ -16,6 +16,7 @@ from indexer.services.pipeline_logging import log_stage_error, log_stage_ok, log
 
 QUEUE_PICK_LIMIT = 256
 WORKER_BATCH_SIZE = 16
+EMBEDDING_PROCESSING_CAP = 1000
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff"}
 
 
@@ -174,9 +175,50 @@ def queue_missing_embeddings_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER
     token = acquire_lock(lock_key, ttl=120)
     if not token:
         log("embedding", "queue skipped (lock held)")
-        return
+        return {
+            "picked": 0,
+            "claimed": 0,
+            "submitted_batches": 0,
+            "reason": "lock held",
+        }
 
     try:
+        current_processing = Image.objects.filter(
+            skip_index=False,
+            embedding_status=ProcessingStatus.PROCESSING,
+        ).count()
+
+        if current_processing >= EMBEDDING_PROCESSING_CAP:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "processing cap reached",
+                "processing_cap": EMBEDDING_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            log(
+                "embedding",
+                f"queue skipped processing_cap current_processing={current_processing} cap={EMBEDDING_PROCESSING_CAP}",
+            )
+            record_task_metric("queue_missing_embeddings_task", started_at, details=details)
+            return details
+
+        allowed_to_claim = max(EMBEDDING_PROCESSING_CAP - current_processing, 0)
+        effective_limit = min(batch_size, allowed_to_claim)
+
+        if effective_limit <= 0:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "no claim room",
+                "processing_cap": EMBEDDING_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            record_task_metric("queue_missing_embeddings_task", started_at, details=details)
+            return details
+
         with transaction.atomic():
             candidate_ids = list(
                 Image.objects.filter(
@@ -185,11 +227,19 @@ def queue_missing_embeddings_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER
                     preview_status=PreviewStatus.OK,
                 )
                 .order_by("id")
-                .values_list("id", flat=True)[:batch_size]
+                .values_list("id", flat=True)[:effective_limit]
             )
 
             if not candidate_ids:
-                return {"picked": 0, "claimed": 0, "submitted_batches": 0}
+                details = {
+                    "picked": 0,
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": EMBEDDING_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_embeddings_task", started_at, details=details)
+                return details
 
             claim_qs = Image.objects.filter(
                 id__in=candidate_ids,
@@ -198,8 +248,17 @@ def queue_missing_embeddings_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER
                 preview_status=PreviewStatus.OK,
             )
             claimed_ids = list(claim_qs.values_list("id", flat=True))
+
             if not claimed_ids:
-                return {"picked": len(candidate_ids), "claimed": 0, "submitted_batches": 0}
+                details = {
+                    "picked": len(candidate_ids),
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": EMBEDDING_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_embeddings_task", started_at, details=details)
+                return details
 
             claim_count = claim_qs.update(
                 embedding_status=ProcessingStatus.PROCESSING,
@@ -213,8 +272,18 @@ def queue_missing_embeddings_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER
             process_embedding_batch_task.delay(batch_ids)
             submitted += 1
 
-        log("embedding", f"queue picked={len(candidate_ids)} claimed={len(claimed_ids)} submitted_batches={submitted}")
-        details = {"picked": len(candidate_ids), "claimed": len(claimed_ids), "submitted_batches": submitted}
+        details = {
+            "picked": len(candidate_ids),
+            "claimed": len(claimed_ids),
+            "submitted_batches": submitted,
+            "processing_cap": EMBEDDING_PROCESSING_CAP,
+            "current_processing": current_processing,
+        }
+        log(
+            "embedding",
+            f"queue picked={len(candidate_ids)} claimed={len(claimed_ids)} submitted_batches={submitted} "
+            f"current_processing={current_processing} cap={EMBEDDING_PROCESSING_CAP}",
+        )
         record_task_metric("queue_missing_embeddings_task", started_at, details=details)
         return details
 

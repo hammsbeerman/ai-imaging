@@ -26,6 +26,14 @@ except Exception:
 
 
 IMAGE_TEXT_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
+QUEUE_PICK_LIMIT = 500
+WORKER_BATCH_SIZE = 25
+TEXT_PROCESSING_CAP = 500
+
+
+def _chunked(seq, size):
+    for i in range(0, len(seq), size):
+        yield seq[i:i + size]
 
 
 def _extract_pdf_text_if_present(path: str) -> str:
@@ -248,8 +256,24 @@ def process_text_batch_task(image_ids):
 
     ok = 0
     failed = 0
+    skipped = 0
+    missing = 0
+
+    rows = Image.objects.filter(id__in=image_ids)
+    by_id = {str(img.id): img for img in rows}
 
     for image_id in image_ids:
+        img = by_id.get(str(image_id))
+        if not img:
+            missing += 1
+            continue
+        if img.skip_index:
+            skipped += 1
+            continue
+        if img.text_status not in (ProcessingStatus.PROCESSING, ProcessingStatus.FAILED):
+            skipped += 1
+            continue
+
         result = _process_one_text_id(str(image_id))
         if result == "ok":
             ok += 1
@@ -260,55 +284,131 @@ def process_text_batch_task(image_ids):
         "selected": len(image_ids),
         "ok": ok,
         "failed": failed,
+        "skipped": skipped,
+        "missing": missing,
     }
 
 
 @shared_task
-def queue_missing_text_task(batch_size: int = 500, chunk_size: int = 25):
+def queue_missing_text_task(batch_size: int = QUEUE_PICK_LIMIT, chunk_size: int = WORKER_BATCH_SIZE):
     close_old_connections()
+    started_at = timezone.now()
 
     lock_key = "lock:queue_missing_text_task"
     token = acquire_lock(lock_key, ttl=120)
     if not token:
         log("text", "queue skipped (lock held)")
-        return
+        return {
+            "picked": 0,
+            "claimed": 0,
+            "submitted_batches": 0,
+            "reason": "lock held",
+        }
 
     try:
-        ids = list(
-            Image.objects.filter(
+        current_processing = Image.objects.filter(
+            skip_index=False,
+            text_status=ProcessingStatus.PROCESSING,
+        ).count()
+
+        if current_processing >= TEXT_PROCESSING_CAP:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "processing cap reached",
+                "processing_cap": TEXT_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            log(
+                "text",
+                f"queue skipped processing_cap current_processing={current_processing} cap={TEXT_PROCESSING_CAP}",
+            )
+            record_task_metric("queue_missing_text_task", started_at, details=details)
+            return details
+
+        allowed_to_claim = max(TEXT_PROCESSING_CAP - current_processing, 0)
+        effective_limit = min(batch_size, allowed_to_claim)
+
+        if effective_limit <= 0:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "no claim room",
+                "processing_cap": TEXT_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            record_task_metric("queue_missing_text_task", started_at, details=details)
+            return details
+
+        with transaction.atomic():
+            candidate_ids = list(
+                Image.objects.filter(
+                    skip_index=False,
+                    text_status=ProcessingStatus.PENDING,
+                    preview_status=PreviewStatus.OK,
+                )
+                .order_by("id")
+                .values_list("id", flat=True)[:effective_limit]
+            )
+
+            if not candidate_ids:
+                details = {
+                    "picked": 0,
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": TEXT_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_text_task", started_at, details=details)
+                return details
+
+            claim_qs = Image.objects.filter(
+                id__in=candidate_ids,
                 skip_index=False,
                 text_status=ProcessingStatus.PENDING,
                 preview_status=PreviewStatus.OK,
-            ).values_list("id", flat=True)[:batch_size]
-        )
+            )
+            claimed_ids = list(claim_qs.values_list("id", flat=True))
 
-        log("text", f"queue selected={len(ids)}")
+            if not claimed_ids:
+                details = {
+                    "picked": len(candidate_ids),
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": TEXT_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_text_task", started_at, details=details)
+                return details
 
-        total_ok = 0
-        total_failed = 0
+            claim_count = claim_qs.update(
+                text_status=ProcessingStatus.PROCESSING,
+                text_error="",
+                text_run_at=timezone.now(),
+            )
 
-        for i in range(0, len(ids), chunk_size):
-            chunk = [str(x) for x in ids[i:i + chunk_size]]
+        submitted = 0
+        claimed_ids = [str(x) for x in claimed_ids[:claim_count]]
+        for batch_ids in _chunked(claimed_ids, chunk_size):
+            process_text_batch_task.delay(batch_ids)
+            submitted += 1
 
-            ok = 0
-            failed = 0
-
-            for image_id in chunk:
-                result = _process_one_text_id(image_id)
-                if result == "ok":
-                    ok += 1
-                else:
-                    failed += 1
-
-            total_ok += ok
-            total_failed += failed
-
-            log("text", f"batch done selected={len(chunk)} ok={ok} failed={failed}")
-
-        return {
-            "selected": len(ids),
-            "ok": total_ok,
-            "failed": total_failed,
+        details = {
+            "picked": len(candidate_ids),
+            "claimed": len(claimed_ids),
+            "submitted_batches": submitted,
+            "processing_cap": TEXT_PROCESSING_CAP,
+            "current_processing": current_processing,
         }
+        log(
+            "text",
+            f"queue picked={len(candidate_ids)} claimed={len(claimed_ids)} submitted_batches={submitted} "
+            f"current_processing={current_processing} cap={TEXT_PROCESSING_CAP}",
+        )
+        record_task_metric("queue_missing_text_task", started_at, details=details)
+        return details
+
     finally:
         release_lock(lock_key, token)

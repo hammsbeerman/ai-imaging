@@ -28,6 +28,8 @@ QUEUE_PICK_LIMIT = 512
 WORKER_BATCH_SIZE = 32
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".gif"}
 
+METADATA_PROCESSING_CAP = 5000
+
 
 def _chunked(seq, size):
     for i in range(0, len(seq), size):
@@ -263,22 +265,88 @@ def queue_missing_metadata_task(limit: int = QUEUE_PICK_LIMIT, chunk_size: int =
     token = acquire_lock(lock_key, ttl=120)
     if not token:
         log("metadata", "queue skipped (lock held)")
-        return
+        return {
+            "picked": 0,
+            "claimed": 0,
+            "submitted_batches": 0,
+            "reason": "lock held",
+        }
 
     try:
+        current_processing = Image.objects.filter(
+            skip_index=False,
+            metadata_status=ProcessingStatus.PROCESSING,
+        ).count()
+
+        if current_processing >= METADATA_PROCESSING_CAP:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "processing cap reached",
+                "processing_cap": METADATA_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            log(
+                "metadata",
+                f"queue skipped processing_cap current_processing={current_processing} cap={METADATA_PROCESSING_CAP}",
+            )
+            record_task_metric("queue_missing_metadata_task", started_at, details=details)
+            return details
+
+        allowed_to_claim = max(METADATA_PROCESSING_CAP - current_processing, 0)
+        effective_limit = min(limit, allowed_to_claim)
+
+        if effective_limit <= 0:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "no claim room",
+                "processing_cap": METADATA_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            record_task_metric("queue_missing_metadata_task", started_at, details=details)
+            return details
+
         with transaction.atomic():
             candidate_ids = list(
-                Image.objects.filter(skip_index=False, metadata_status=ProcessingStatus.PENDING)
+                Image.objects.filter(
+                    skip_index=False,
+                    metadata_status=ProcessingStatus.PENDING,
+                )
                 .order_by("id")
-                .values_list("id", flat=True)[:limit]
+                .values_list("id", flat=True)[:effective_limit]
             )
-            if not candidate_ids:
-                return {"picked": 0, "claimed": 0, "submitted_batches": 0}
 
-            claim_qs = Image.objects.filter(id__in=candidate_ids, skip_index=False, metadata_status=ProcessingStatus.PENDING)
+            if not candidate_ids:
+                details = {
+                    "picked": 0,
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": METADATA_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_metadata_task", started_at, details=details)
+                return details
+
+            claim_qs = Image.objects.filter(
+                id__in=candidate_ids,
+                skip_index=False,
+                metadata_status=ProcessingStatus.PENDING,
+            )
             claimed_ids = list(claim_qs.values_list("id", flat=True))
+
             if not claimed_ids:
-                return {"picked": len(candidate_ids), "claimed": 0, "submitted_batches": 0}
+                details = {
+                    "picked": len(candidate_ids),
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": METADATA_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_metadata_task", started_at, details=details)
+                return details
 
             claimed = claim_qs.update(
                 metadata_status=ProcessingStatus.PROCESSING,
@@ -292,8 +360,18 @@ def queue_missing_metadata_task(limit: int = QUEUE_PICK_LIMIT, chunk_size: int =
             process_metadata_batch_task.delay(batch_ids)
             submitted += 1
 
-        log("metadata", f"queue picked={len(candidate_ids)} claimed={len(claimed_ids)} submitted_batches={submitted}")
-        details = {"picked": len(candidate_ids), "claimed": len(claimed_ids), "submitted_batches": submitted}
+        log(
+            "metadata",
+            f"queue picked={len(candidate_ids)} claimed={len(claimed_ids)} submitted_batches={submitted} "
+            f"current_processing={current_processing} cap={METADATA_PROCESSING_CAP}",
+        )
+        details = {
+            "picked": len(candidate_ids),
+            "claimed": len(claimed_ids),
+            "submitted_batches": submitted,
+            "processing_cap": METADATA_PROCESSING_CAP,
+            "current_processing": current_processing,
+        }
         record_task_metric("queue_missing_metadata_task", started_at, details=details)
         return details
 

@@ -157,6 +157,8 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.getenv("CELERY_WORKER_PREFETCH_MULTIP
 CELERY_TASK_ACKS_LATE = env_bool("CELERY_TASK_ACKS_LATE", default=True)
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 20
 CELERY_WORKER_MAX_MEMORY_PER_CHILD = 500000
+CELERY_TASK_TIME_LIMIT = 1800
+CELERY_TASK_SOFT_TIME_LIMIT = 1500
 
 CELERY_BEAT_SCHEDULE = {
     "scan-archive-every-100-seconds": {
@@ -293,6 +295,33 @@ CELERY_TASK_ROUTES = {
 
 
 
+}
+
+CELERY_TASK_ANNOTATIONS = {
+    "indexer.tasks_preview.process_preview_task": {
+        "soft_time_limit": 300,
+        "time_limit": 360,
+    },
+    "indexer.tasks_preview.process_preview_batch_task": {
+        "soft_time_limit": 600,
+        "time_limit": 720,
+    },
+    "indexer.tasks_text.extract_text_task": {
+        "soft_time_limit": 300,
+        "time_limit": 360,
+    },
+    "indexer.tasks_metadata.extract_metadata_task": {
+        "soft_time_limit": 180,
+        "time_limit": 240,
+    },
+    "indexer.tasks_embedding.embed_image_task": {
+        "soft_time_limit": 300,
+        "time_limit": 360,
+    },
+    "indexer.tasks_documents.sync_document_from_image_task": {
+        "soft_time_limit": 300,
+        "time_limit": 360,
+    },
 }
 
 INDEX_PREVIEW_ROOT = os.getenv("INDEX_PREVIEW_ROOT", "/mnt/ai-previews/development")
