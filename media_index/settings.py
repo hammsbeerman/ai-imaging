@@ -169,25 +169,25 @@ CELERY_BEAT_SCHEDULE = {
         "task": "indexer.tasks_text.queue_missing_text_task",
         "schedule": 60.0,
         "args": (1000,),
-        "options": {"queue": "ops"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "queue-embeddings-every-60-sec": {
         "task": "indexer.tasks_embedding.queue_missing_embeddings_task",
         "schedule": 60.0,
         "args": (256, 16),
-        "options": {"queue": "ops"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "queue-metadata-every-120-sec": {
         "task": "indexer.tasks_metadata.queue_missing_metadata_task",
         "schedule": 120.0,
         "args": (512, 32),
-        "options": {"queue": "ops"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "queue-dedupe-every-90-sec": {
         "task": "indexer.tasks_dedupe.queue_missing_dedupe_task",
         "schedule": 90.0,
         "args": (500,),
-        "options": {"queue": "ops", "routing_key": "ops"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "repair-missing-previews-every-5-min": {
         "task": "indexer.tasks_preview_repair.repair_missing_previews_task",
@@ -205,11 +205,11 @@ CELERY_BEAT_SCHEDULE = {
         "args": (45,),
         "options": {"queue": "ops"},
     },
-    "reset-stuck-processing-every-10-min": {
+        "reset-stuck-processing-every-10-min": {
         "task": "indexer.tasks_recovery.reset_stale_processing_task",
         "schedule": 300.0,
         "args": (45,),
-        "options": {"queue": "metadata"},
+        "options": {"queue": "control", "routing_key": "control"},
     },
     "rebuild_archive_stats": {
         "task": "indexer.tasks_stats.rebuild_archive_stats_task",
