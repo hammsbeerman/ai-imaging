@@ -229,32 +229,41 @@ CELERY_BEAT_SCHEDULE = {
 CELERY_TASK_ROUTES = {
     "indexer.tasks.scan_task": {"queue": "scan"},
 
+
     "indexer.tasks_preview.queue_missing_previews_task": {"queue": "preview"},
     "indexer.tasks_preview.process_preview_task": {"queue": "preview"},
     "indexer.tasks_preview.process_preview_batch_task": {"queue": "preview"},
     "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
+    "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
 
-    "indexer.tasks_text.queue_missing_text_task": {"queue": "ops"},
+
     "indexer.tasks_text.extract_text_task": {"queue": "text"},
 
-    "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "ops"},
+
+    "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "control"},
+    "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "control"},
+    "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "control"},
+    "indexer.tasks_text.queue_missing_text_task": {"queue": "control"},
+    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "control"},
+
+    
     "indexer.tasks_embedding.embed_image_task": {"queue": "embedding"},
     "indexer.tasks_embedding.process_embedding_batch_task": {"queue": "embedding"},
 
-    "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "ops"},
+    
     "indexer.tasks_metadata.extract_metadata_task": {"queue": "metadata"},
     "indexer.tasks_metadata.process_metadata_batch_task": {"queue": "metadata"},
-
-    "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "ops"},
     "indexer.tasks_dedupe.dedupe_image_task": {"queue": "metadata"},
     "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
+    
+    
 
     "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "ops"},
     "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "ops"},
     "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "ops"},
 
-    "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
-    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "ops"},
+    
+    
 }
 
 INDEX_PREVIEW_ROOT = os.getenv("INDEX_PREVIEW_ROOT", "/mnt/ai-previews/development")
