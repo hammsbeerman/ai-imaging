@@ -14,6 +14,8 @@ from indexer.tasks_metrics import record_task_metric
 
 QUEUE_PICK_LIMIT = 128
 WORKER_BATCH_SIZE = 16
+PREVIEW_PROCESSING_CAP = 2000
+
 PREVIEWABLE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff",
     ".pdf", ".svg", ".eps", ".ai", ".psd", ".indd",
@@ -131,9 +133,50 @@ def queue_missing_previews_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER_B
     token = acquire_lock(lock_key, ttl=120)
     if not token:
         log("preview", "queue skipped (lock held)")
-        return
+        return {
+            "picked": 0,
+            "claimed": 0,
+            "submitted_batches": 0,
+            "reason": "lock held",
+        }
 
     try:
+        current_processing = Image.objects.filter(
+            skip_index=False,
+            preview_status=PreviewStatus.PROCESSING,
+        ).count()
+
+        if current_processing >= PREVIEW_PROCESSING_CAP:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "processing cap reached",
+                "processing_cap": PREVIEW_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            log(
+                "preview",
+                f"queue skipped processing_cap current_processing={current_processing} cap={PREVIEW_PROCESSING_CAP}",
+            )
+            record_task_metric("queue_missing_previews_task", started_at, details=details)
+            return details
+
+        allowed_to_claim = max(PREVIEW_PROCESSING_CAP - current_processing, 0)
+        effective_limit = min(batch_size, allowed_to_claim)
+
+        if effective_limit <= 0:
+            details = {
+                "picked": 0,
+                "claimed": 0,
+                "submitted_batches": 0,
+                "reason": "no claim room",
+                "processing_cap": PREVIEW_PROCESSING_CAP,
+                "current_processing": current_processing,
+            }
+            record_task_metric("queue_missing_previews_task", started_at, details=details)
+            return details
+
         with transaction.atomic():
             candidate_ids = list(
                 Image.objects.filter(
@@ -141,11 +184,19 @@ def queue_missing_previews_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER_B
                     preview_status=PreviewStatus.PENDING,
                 )
                 .order_by("id")
-                .values_list("id", flat=True)[:batch_size]
+                .values_list("id", flat=True)[:effective_limit]
             )
 
             if not candidate_ids:
-                return {"picked": 0, "claimed": 0, "submitted_batches": 0}
+                details = {
+                    "picked": 0,
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": PREVIEW_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_previews_task", started_at, details=details)
+                return details
 
             claimed_qs = Image.objects.filter(
                 id__in=candidate_ids,
@@ -153,8 +204,17 @@ def queue_missing_previews_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER_B
                 skip_index=False,
             )
             claimed_ids = list(claimed_qs.values_list("id", flat=True))
+
             if not claimed_ids:
-                return {"picked": len(candidate_ids), "claimed": 0, "submitted_batches": 0}
+                details = {
+                    "picked": len(candidate_ids),
+                    "claimed": 0,
+                    "submitted_batches": 0,
+                    "processing_cap": PREVIEW_PROCESSING_CAP,
+                    "current_processing": current_processing,
+                }
+                record_task_metric("queue_missing_previews_task", started_at, details=details)
+                return details
 
             claimed = claimed_qs.update(
                 preview_status=PreviewStatus.PROCESSING,
@@ -168,8 +228,18 @@ def queue_missing_previews_task(batch_size=QUEUE_PICK_LIMIT, chunk_size=WORKER_B
             process_preview_batch_task.delay(batch_ids)
             submitted += 1
 
-        log("preview", f"queue picked={len(candidate_ids)} claimed={len(claimed_ids)} submitted_batches={submitted}")
-        details = {"picked": len(candidate_ids), "claimed": len(claimed_ids), "submitted_batches": submitted}
+        details = {
+            "picked": len(candidate_ids),
+            "claimed": len(claimed_ids),
+            "submitted_batches": submitted,
+            "processing_cap": PREVIEW_PROCESSING_CAP,
+            "current_processing": current_processing,
+        }
+        log(
+            "preview",
+            f"queue picked={len(candidate_ids)} claimed={len(claimed_ids)} submitted_batches={submitted} "
+            f"current_processing={current_processing} cap={PREVIEW_PROCESSING_CAP}",
+        )
         record_task_metric("queue_missing_previews_task", started_at, details=details)
         return details
 
