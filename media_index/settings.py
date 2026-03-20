@@ -55,8 +55,10 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "indexer.trusted_proxy.TrustedProxyCsrfBypassMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "indexer.trusted_proxy.TrustedProxyUserMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -136,6 +138,9 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 MEDIA_URL = os.getenv("MEDIA_URL", "/media/")
 MEDIA_ROOT = os.getenv("MEDIA_ROOT", str(BASE_DIR / "media"))
+
+STUDIO_PROXY_SHARED_SECRET = os.getenv("STUDIO_PROXY_SHARED_SECRET", "").strip()
+STUDIO_PROXY_USERNAME = os.getenv("STUDIO_PROXY_USERNAME", "studio_proxy").strip()
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
