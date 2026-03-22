@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# media-index-ops
+#
+# Safe wrapper for UI-triggered ops actions.
+#
+# Supports:
+#   service <start|stop|restart|status> <service-name>
+#   queue   <purge|count>               <queue-name>
+#
+# Design:
+# - Called by Django on the WEB box through sudo
+# - Web/beat services are handled locally
+# - Worker services and queue actions are routed over SSH to the worker box
+# - Only explicitly allowlisted services and queues are accepted
+###############################################################################
+
+###############################################################################
+# CONFIG
+###############################################################################
+
+# Web/app box paths
+APP_ROOT="/opt/media-index-prod/media_index"
+VENV="/opt/media-index-prod/venv"
+MANAGE_PY="$APP_ROOT/manage.py"
+
+# SSH settings for worker node
+SSH_BIN="/usr/bin/ssh"
+SSH_OPTS=(
+  -o BatchMode=yes
+  -o StrictHostKeyChecking=yes
+  -o ConnectTimeout=10
+)
+
+# Change this to your real worker host/user
+WORKER_HOST="ubuntu@192.168.0.66"
+
+# Local systemctl binary
+SYSTEMCTL_BIN="/bin/systemctl"
+
+# Python binary inside venv
+PYTHON_BIN="$VENV/bin/python"
+
+###############################################################################
+# ALLOWLISTS
+###############################################################################
+
+# Services handled on the web box
+LOCAL_SERVICES=(
+  "media-index-gunicorn"
+  "media-index-celery-beat"
+)
+
+# Services handled on the worker box
+REMOTE_WORKER_SERVICES=(
+  "media-index-celery-worker"
+  "media-index-celery-worker-ops"
+  "media-index-celery-worker-preview"
+  "media-index-celery-worker-docs"
+)
+
+# Allowed queues
+ALLOWED_QUEUES=(
+  "ops"
+  "preview"
+  "scan"
+  "ocr"
+  "mail"
+  "control"
+  "embedding"
+  "metadata"
+  "text"
+)
+
+###############################################################################
+# HELPERS
+###############################################################################
+
+log() {
+  printf '[media-index-ops] %s\n' "$*"
+}
+
+err() {
+  printf '[media-index-ops] ERROR: %s\n' "$*" >&2
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  media-index-ops service <start|stop|restart|status> <service-name>
+  media-index-ops queue   <purge|count>               <queue-name>
+
+Examples:
+  media-index-ops service restart media-index-celery-worker-preview
+  media-index-ops service restart media-index-celery-beat
+  media-index-ops queue count preview
+  media-index-ops queue purge docs
+EOF
+  exit 2
+}
+
+contains() {
+  local needle="$1"
+  shift
+  local item
+  for item in "$@"; do
+    [[ "$item" == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+require_file() {
+  local path="$1"
+  [[ -e "$path" ]] || {
+    err "Required path missing: $path"
+    exit 10
+  }
+}
+
+run_local_systemctl() {
+  local verb="$1"
+  local service="$2"
+
+  log "Running locally: $SYSTEMCTL_BIN $verb $service"
+  exec "$SYSTEMCTL_BIN" "$verb" "$service"
+}
+
+run_remote_systemctl() {
+  local verb="$1"
+  local service="$2"
+
+  log "Running on worker: $service via $WORKER_HOST"
+  exec "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" "sudo $SYSTEMCTL_BIN $verb $service"
+}
+
+run_remote_queue_command() {
+  local verb="$1"
+  local queue="$2"
+
+  require_file "$PYTHON_BIN"
+  require_file "$MANAGE_PY"
+
+  log "Running queue action on worker: $verb $queue via $WORKER_HOST"
+  exec "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" \
+    "cd '$APP_ROOT' && '$PYTHON_BIN' '$MANAGE_PY' ops_queue '$verb' '$queue'"
+}
+
+###############################################################################
+# ARG PARSING
+###############################################################################
+
+[[ $# -eq 3 ]] || usage
+
+MODE="$1"
+VERB="$2"
+TARGET="$3"
+
+###############################################################################
+# MAIN
+###############################################################################
+
+case "$MODE" in
+  service)
+    case "$VERB" in
+      start|stop|restart|status) ;;
+      *) err "Unsupported service verb: $VERB"; usage ;;
+    esac
+
+    if contains "$TARGET" "${LOCAL_SERVICES[@]}"; then
+      run_local_systemctl "$VERB" "$TARGET"
+    fi
+
+    if contains "$TARGET" "${REMOTE_WORKER_SERVICES[@]}"; then
+      run_remote_systemctl "$VERB" "$TARGET"
+    fi
+
+    err "Refusing unknown service: $TARGET"
+    exit 20
+    ;;
+
+  queue)
+    case "$VERB" in
+      purge|count) ;;
+      *) err "Unsupported queue verb: $VERB"; usage ;;
+    esac
+
+    if ! contains "$TARGET" "${ALLOWED_QUEUES[@]}"; then
+      err "Refusing unknown queue: $TARGET"
+      exit 21
+    fi
+
+    run_remote_queue_command "$VERB" "$TARGET"
+    ;;
+
+  *)
+    err "Unsupported mode: $MODE"
+    usage
+    ;;
+esac
