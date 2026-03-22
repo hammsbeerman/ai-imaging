@@ -11,7 +11,8 @@ set -euo pipefail
 # - Continues through remote failures and prints summary at end
 ###############################################################################
 
-LOCAL_DEPLOY_SCRIPT="/opt/media-index-prod/deploy.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_DEPLOY_SCRIPT="$SCRIPT_DIR/deploy.sh"
 SSH_BIN="/usr/bin/ssh"
 
 SSH_OPTS=(
@@ -31,13 +32,22 @@ SSH_OPTS=(
 #   worker
 #   all
 NODES=(
-  "worker-1|192.168.0.66|/opt/media-index-prod/deploy.sh|all"
+  "worker-1|192.168.0.66|/opt/media-index-prod/media_index/bin/deploy.sh|all"
   # "worker-2|192.168.0.67|/opt/media-index-prod/deploy.sh|preview"
   # "worker-3|192.168.0.68|/opt/media-index-prod/deploy.sh|embedding"
 )
 
 SUCCESSES=()
 FAILURES=()
+
+resolve_script() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    readlink -f "$path" || realpath "$path" || echo "$path"
+  else
+    echo "$path"
+  fi
+}
 
 log_block() {
   echo
@@ -49,12 +59,13 @@ log_block() {
 run_local() {
   log_block "Running local deploy on $(hostname)"
 
-  if [[ ! -x "$LOCAL_DEPLOY_SCRIPT" ]]; then
+  if [[ ! -f "$LOCAL_DEPLOY_SCRIPT" ]]; then
     echo "ERROR: local deploy script not found or not executable: $LOCAL_DEPLOY_SCRIPT"
     exit 1
   fi
 
-  ROLE="web" "$LOCAL_DEPLOY_SCRIPT"
+  echo "Using local deploy script: $(resolve_script "$LOCAL_DEPLOY_SCRIPT")"
+  ROLE="web" bash "$LOCAL_DEPLOY_SCRIPT"
   SUCCESSES+=("local:$(hostname)")
 }
 
@@ -66,8 +77,9 @@ run_remote_node() {
 
   log_block "Running remote deploy on ${name} (${host}) role=${role}"
 
-  if "$SSH_BIN" "${SSH_OPTS[@]}" "$host" "test -x '$remote_script'"; then
-    if "$SSH_BIN" "${SSH_OPTS[@]}" "$host" "ROLE='$role' '$remote_script'"; then
+  if "$SSH_BIN" "${SSH_OPTS[@]}" "$host" "test -f '$remote_script'"; then
+    echo "Using remote deploy script on ${host}: $("$SSH_BIN" "${SSH_OPTS[@]}" "$host" "readlink -f '$remote_script' || realpath '$remote_script' || echo '$remote_script'")"
+    if "$SSH_BIN" "${SSH_OPTS[@]}" "$host" "ROLE='$role' bash '$remote_script'"; then
       SUCCESSES+=("${name}:${host}")
     else
       echo "ERROR: remote deploy failed on ${name} (${host})"
