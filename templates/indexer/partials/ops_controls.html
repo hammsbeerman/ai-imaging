@@ -22,7 +22,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Scan Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.scan_queue_depth|default:0 %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=scan_queue.pending_dirs|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="scan" btn_class="btn-danger" label="Purge Scan Queue" confirm_text="Purge all queued scan jobs? This does not stop active jobs." %}
   </div>
@@ -30,7 +30,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Preview Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.preview_queue_depth|default:0 %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=preview_queue.pending|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="preview" btn_class="btn-danger" label="Purge Preview Queue" confirm_text="Purge all queued preview jobs? This does not stop active jobs." %}
   </div>
@@ -38,7 +38,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Text Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.text_queue_depth|default:0 %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=text_queue.pending|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="text" btn_class="btn-danger" label="Purge Text Queue" confirm_text="Purge all queued text jobs? This does not stop active jobs." %}
   </div>
@@ -46,7 +46,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Metadata Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.metadata_queue_depth|default:0 %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=metadata_queue.pending|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="metadata" btn_class="btn-danger" label="Purge Metadata Queue" confirm_text="Purge all queued metadata jobs? This does not stop active jobs." %}
   </div>
@@ -54,7 +54,7 @@
   <div class="mb-4">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Embedding Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.embedding_queue_depth|default:0 %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=embedding_queue.pending|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="embedding" btn_class="btn-danger" label="Purge Embedding Queue" confirm_text="Purge all queued embedding jobs? This does not stop active jobs." %}
   </div>

@@ -177,6 +177,12 @@ EOF
     worker)
       cat <<EOF
 media-index-celery-worker
+media-index-celery-worker-ops
+media-index-celery-worker-ocr
+media-index-celery-worker-mail
+media-index-celery-worker-control
+media-index-celery-worker-text
+media-index-celery-worker-metadata
 EOF
       ;;
     all)
@@ -184,8 +190,14 @@ EOF
 media-index-gunicorn
 media-index-celery-beat
 media-index-celery-worker
+media-index-celery-worker-ops
 media-index-celery-worker-scan
 media-index-celery-worker-preview
+media-index-celery-worker-ocr
+media-index-celery-worker-mail
+media-index-celery-worker-control
+media-index-celery-worker-text
+media-index-celery-worker-metadata
 media-index-celery-worker-embedding
 EOF
       ;;

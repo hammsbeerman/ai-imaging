@@ -607,6 +607,8 @@ def ui_home(request):
         "preview_complete": stats.preview_ok or 0,
         "text_complete": stats.text_ok or 0,
         "metadata_complete": stats.metadata_ok or 0,
+        "queue_snapshot": queue_snapshot,
+        "queue_snapshot_updated_at": queue_snapshot_updated_at,
 
     }
 
