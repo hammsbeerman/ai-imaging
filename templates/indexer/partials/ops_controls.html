@@ -1,3 +1,23 @@
+<div class="col-12 col-lg-4 mb-4">
+  <h6 class="mb-3">Services</h6>
+
+  <div class="d-flex flex-wrap gap-2 mb-2">
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="web" btn_class="btn-primary" label="Restart Web" confirm_text="Restart web service?" %}
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="beat" btn_class="btn-warning" label="Restart Beat" confirm_text="Restart celery beat?" %}
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mb-2">
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="ops" btn_class="btn-outline-primary" label="Restart Ops" confirm_text="Restart ops worker?" %}
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="preview" btn_class="btn-outline-primary" label="Restart Preview" %}
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="text" btn_class="btn-outline-primary" label="Restart Text" %}
+  </div>
+
+  <div class="d-flex flex-wrap gap-2">
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="embedding" btn_class="btn-outline-secondary" label="Restart Embedding" %}
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="ocr" btn_class="btn-outline-secondary" label="Restart OCR" %}
+    {% include "indexer/partials/ops_form_button.html" with action="restart" target="mail" btn_class="btn-outline-secondary" label="Restart Mail" %}
+  </div>
+</div>
 <div class="col-12 col-lg-4">
   <h6 class="mb-3 d-flex justify-content-between align-items-center">
     <span>Clear Backlogs</span>

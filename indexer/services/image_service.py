@@ -17,6 +17,11 @@ def build_image_summary(img, score=None):
         "embedding_status": getattr(img, "embedding_status", ""),
         "customer_name": getattr(img, "customer_name", "") or "",
         "job_type": getattr(img, "job_type", "") or "",
+        "folder_tokens": getattr(img, "folder_tokens", "") or "",
+        "probable_job_number": getattr(img, "probable_job_number", "") or "",
+        "extracted_text": getattr(img, "extracted_text", "") or "",
+        "root_id": getattr(img, "root_id", None),
+        "relative_dir": getattr(img, "relative_dir", "") or "",
     }
 
 

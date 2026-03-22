@@ -2,7 +2,7 @@
 
 {% block title %}Search · AI Image Catalog{% endblock %}
 {% block page_title %}Search{% endblock %}
-{% block page_meta %}Search by text, similarity, duplicates, and folder context{% endblock %}
+{% block page_meta %}Unified smart search across text, OCR, job info, folder terms, and embeddings{% endblock %}
 
 {% block content %}
 
@@ -16,8 +16,7 @@
     hx-select="#search-results"
     hx-push-url="true"
   >
-
-    <div class="col-12 col-lg-5">
+    <div class="col-12 col-lg-7">
       <input
         type="text"
         name="q"
@@ -28,15 +27,6 @@
     </div>
 
     <div class="col-6 col-lg-2">
-      <select name="mode" class="form-select">
-        <option value="hybrid" {% if mode == "hybrid" or not mode %}selected{% endif %}>Hybrid</option>
-        <option value="semantic" {% if mode == "semantic" %}selected{% endif %}>Semantic</option>
-        <option value="db" {% if mode == "db" %}selected{% endif %}>Database</option>
-        <option value="folder" {% if mode == "folder" %}selected{% endif %}>Folder</option>
-      </select>
-    </div>
-
-    <div class="col-6 col-lg-2">
       <select name="limit" class="form-select">
         <option value="24" {% if limit == 24 %}selected{% endif %}>24</option>
         <option value="48" {% if limit == 48 %}selected{% endif %}>48</option>
@@ -44,19 +34,19 @@
       </select>
     </div>
 
-    <div class="col-12 col-lg-3 d-grid">
+    <div class="col-6 col-lg-3 d-grid">
       <button type="submit" class="btn btn-primary">
         Search
       </button>
     </div>
+
     {% if search_folder %}
       <input type="hidden" name="folder_id" value="{{ search_folder.id }}">
     {% endif %}
-
   </form>
 
   {% if search_folder %}
-  <div class="page-card p-3 mb-3">
+  <div class="page-card p-3 mb-3 mt-3">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
       <div>
         <div class="small text-muted">Scoped to folder subtree</div>
@@ -66,31 +56,16 @@
         <a href="/ui/browse/folder/{{ search_folder.id }}/" class="btn btn-sm btn-outline-secondary">
           Back to folder
         </a>
-        <a href="/ui/search/?mode={{ mode }}&q={{ q|urlencode }}" class="btn btn-sm btn-outline-secondary">
+        <a href="/ui/search/?q={{ q|urlencode }}" class="btn btn-sm btn-outline-secondary">
           Clear folder scope
         </a>
       </div>
     </div>
   </div>
-{% endif %}
+  {% endif %}
 
   <div class="small text-muted mt-3">
-
-    <div>
-      <strong>Mode:</strong>
-      {% if mode == "hybrid" or not mode %}
-        Hybrid
-      {% elif mode == "semantic" %}
-        Semantic
-      {% elif mode == "db" %}
-        Database
-      {% elif mode == "folder" %}
-        Folder
-      {% else %}
-        {{ mode }}
-      {% endif %}
-    </div>
-
+    <div><strong>Search:</strong> Smart unified search</div>
     <div class="mt-1">
       Try:
       <a href="/ui/search/?q=smith+wedding">smith wedding</a>,
@@ -98,11 +73,8 @@
       <a href="/ui/search/?q=truck+wrap">truck wrap</a>,
       <a href="/ui/search/?q=acme+brochure">acme brochure</a>
     </div>
-
   </div>
-
 </div>
-
 
 <div class="page-card p-3 mb-3">
   <form action="/ui/search/" method="post" enctype="multipart/form-data" class="row g-2">
@@ -122,10 +94,8 @@
         Search by uploaded image
       </button>
     </div>
-
   </form>
 </div>
-
 
 <div id="search-results">
   {% include "indexer/partials/search_results.html" %}

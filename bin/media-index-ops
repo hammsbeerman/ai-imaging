@@ -11,10 +11,6 @@ set -euo pipefail
 #   queue   <purge|count>               <queue-name>
 ###############################################################################
 
-###############################################################################
-# CONFIG
-###############################################################################
-
 REMOTE_APP_ROOT="/opt/media-index-prod/media_index"
 REMOTE_VENV="/opt/media-index-prod/venv"
 REMOTE_MANAGE_PY="$REMOTE_APP_ROOT/manage.py"
@@ -29,10 +25,6 @@ SSH_OPTS=(
 
 WORKER_HOST="ubuntu@192.168.0.66"
 SYSTEMCTL_BIN="/bin/systemctl"
-
-###############################################################################
-# ALLOWLISTS
-###############################################################################
 
 LOCAL_SERVICES=(
   "media-index-gunicorn"
@@ -49,6 +41,7 @@ REMOTE_WORKER_SERVICES=(
   "media-index-celery-worker-metadata"
   "media-index-celery-worker-ocr"
   "media-index-celery-worker-scan"
+  "media-index-celery-worker-control"
 )
 
 ALLOWED_QUEUES=(
@@ -62,10 +55,6 @@ ALLOWED_QUEUES=(
   "metadata"
   "text"
 )
-
-###############################################################################
-# HELPERS
-###############################################################################
 
 log() {
   printf '[media-index-ops] %s\n' "$*" >&2
@@ -127,19 +116,11 @@ run_remote_queue_command() {
     "test -x '$REMOTE_PYTHON_BIN' && test -f '$REMOTE_MANAGE_PY' && cd '$REMOTE_APP_ROOT' && '$REMOTE_PYTHON_BIN' '$REMOTE_MANAGE_PY' ops_queue '$verb' '$queue'"
 }
 
-###############################################################################
-# ARG PARSING
-###############################################################################
-
 [[ $# -eq 3 ]] || usage
 
 MODE="$1"
 VERB="$2"
 TARGET="$3"
-
-###############################################################################
-# MAIN
-###############################################################################
 
 case "$MODE" in
   service)

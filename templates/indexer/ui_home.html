@@ -297,6 +297,15 @@
     </div>
   </div>
 </div>
+{% if messages %}
+  <div class="mb-3">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} py-2">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
 {% if request.user.is_staff or request.user.is_superuser %}
   {% include "indexer/partials/ops_controls.html" %}
 {% endif %}

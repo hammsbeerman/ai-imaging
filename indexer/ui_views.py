@@ -71,6 +71,11 @@ from indexer.services.preview_health import (
     get_preview_drift,
     get_preview_drift_count,
 )
+from indexer.services.search_service import (
+    hybrid_search_for_user,
+    duplicates_for_user,
+    cluster_for_user,
+)
 from indexer.models_documents import Document
 
 from .ops_actions import collect_ops_status
@@ -623,10 +628,11 @@ def ui_search(request):
 
     q = (request.GET.get("q") or "").strip()
     limit = int(request.GET.get("limit") or 50)
-    mode = (request.GET.get("mode") or "hybrid").strip().lower()
+    limit = max(1, min(limit, 200))
 
     results = []
     source_img = None
+    mode = "search"
 
     folder_id = request.GET.get("folder_id")
     search_folder = None
@@ -641,84 +647,66 @@ def ui_search(request):
     def folder_scope_prefix(folder: Folder) -> str:
         return (folder.rel_path or "").strip("/")
 
-    def apply_folder_scope_qs(qs, folder: Folder | None):
-        if not folder:
-            return qs
-
-        prefix = folder_scope_prefix(folder)
-        qs = qs.filter(root_id=folder.root_id)
-
-        if not prefix:
-            return qs
-
-        return qs.filter(
-            Q(relative_dir=prefix) |
-            Q(relative_dir__startswith=prefix + "/")
-        )
-
-    def image_in_folder_scope(img: Image, folder: Folder | None) -> bool:
+    def image_in_folder_scope(img, folder: Folder | None) -> bool:
         if not folder:
             return True
 
-        if img.root_id != folder.root_id:
+        img_root_id = getattr(img, "root_id", None)
+        if img_root_id is None and isinstance(img, dict):
+            img_root_id = img.get("root_id")
+
+        if img_root_id != folder.root_id:
             return False
 
         prefix = folder_scope_prefix(folder)
-        rel_dir = (img.relative_dir or "").strip("/")
-
         if not prefix:
             return True
 
-        return rel_dir == prefix or rel_dir.startswith(prefix + "/")
+        rel_dir = ""
+        if isinstance(img, dict):
+            rel_dir = (img.get("relative_dir") or "").strip("/")
+            path = (img.get("path") or "").strip("/")
+        else:
+            rel_dir = (getattr(img, "relative_dir", "") or "").strip("/")
+            path = (getattr(img, "path", "") or "").strip("/")
+
+        if rel_dir:
+            return rel_dir == prefix or rel_dir.startswith(prefix + "/")
+
+        return f"/{prefix.lower()}/" in f"/{path.lower()}/"
 
     def filter_images_to_folder_scope(images, folder: Folder | None):
         if not folder:
             return images
         return [img for img in images if image_in_folder_scope(img, folder)]
 
-    def hydrate_hits(hits, exclude_id=None):
-        point_ids = [str(h.get("point_id")) for h in hits if h.get("point_id")]
+    if request.method == "POST" and request.FILES.get("image"):
+        mode = "similar"
+        vector = embed_uploaded_image(request.FILES["image"])
+        hits = qdrant_search(vector, limit=limit)
 
+        point_ids = [str(h.get("point_id")) for h in hits if h.get("point_id")]
         qs = Image.objects.select_related("root").filter(id__in=point_ids)
+
         if not request.user.is_superuser and allowed:
             qs = qs.filter(root_id__in=allowed)
 
         img_map = {str(i.id): i for i in qs}
 
         hydrated = []
-        for h in hits:
-            iid = str(h.get("point_id"))
-            if not iid:
-                continue
-            if exclude_id and iid == str(exclude_id):
-                continue
-
+        for hit in hits:
+            iid = str(hit.get("point_id"))
             img = img_map.get(iid)
             if not img:
                 continue
-
-            img.score = h.get("score")
+            img.score = hit.get("score")
             hydrated.append(img)
 
-        return filter_images_to_folder_scope(hydrated, search_folder)
+        results = filter_images_to_folder_scope(hydrated, search_folder)
 
-    if request.method == "POST" and request.FILES.get("image"):
-        mode = "similar"
-        limit = int(request.POST.get("limit") or limit)
+    elif request.GET.get("mode") == "similar_existing":
+        mode = "similar_existing"
 
-        vec = embed_uploaded_image(request.FILES["image"])
-        hits = qdrant_search(vec, limit=limit)
-        results = hydrate_hits(hits)
-
-    elif q and mode == "semantic":
-        hits = search_text(q, limit=limit, folder=search_folder)
-        results = hydrate_hits(hits)
-
-    elif q and mode == "hybrid":
-        hits = hybrid_search(q, limit=limit, folder=search_folder)
-        results = hydrate_hits(hits)
-
-    elif mode == "similar_existing":
         source = get_object_or_404(
             Image.objects.select_related("root"),
             id=request.GET.get("id"),
@@ -728,12 +716,12 @@ def ui_search(request):
         if not request.user.is_superuser and allowed and source.root_id not in allowed:
             raise Http404("Not found")
 
-        vector = qdrant_get_vector(str(source.id))
-        if vector:
-            hits = qdrant_search(vector, limit=limit)
-            results = hydrate_hits(hits, exclude_id=source.id)
+        results = cluster_for_user(request.user, source.id, limit=limit)
+        results = filter_images_to_folder_scope(results, search_folder)
 
-    elif mode == "duplicates":
+    elif request.GET.get("mode") == "duplicates":
+        mode = "duplicates"
+
         source = get_object_or_404(
             Image.objects.select_related("root"),
             id=request.GET.get("id"),
@@ -743,10 +731,12 @@ def ui_search(request):
         if not request.user.is_superuser and allowed and source.root_id not in allowed:
             raise Http404("Not found")
 
-        hits = find_near_duplicates(str(source.id), limit=limit)
-        results = hydrate_hits(hits)
+        results = duplicates_for_user(request.user, source.id, limit=limit)
+        results = filter_images_to_folder_scope(results, search_folder)
 
-    elif mode == "cluster":
+    elif request.GET.get("mode") == "cluster":
+        mode = "cluster"
+
         source = get_object_or_404(
             Image.objects.select_related("root"),
             id=request.GET.get("id"),
@@ -756,36 +746,13 @@ def ui_search(request):
         if not request.user.is_superuser and allowed and source.root_id not in allowed:
             raise Http404("Not found")
 
-        hits = get_visual_cluster(str(source.id), limit=limit)
-        results = hydrate_hits(hits)
+        results = cluster_for_user(request.user, source.id, limit=limit)
+        results = filter_images_to_folder_scope(results, search_folder)
 
-    elif mode == "folder":
-        path = (request.GET.get("path") or "").strip()
-        hits = search_by_folder(path, limit=limit, folder=search_folder)
-        results = hydrate_hits(hits)
-
-    elif q and mode == "db":
-        qs = Image.objects.select_related("root")
-
-        if not request.user.is_superuser and allowed:
-            qs = qs.filter(root_id__in=allowed)
-
-        qs = apply_folder_scope_qs(qs, search_folder)
-
-        qs = qs.filter(
-            Q(filename__icontains=q)
-            | Q(path__icontains=q)
-            | Q(text__icontains=q)
-            | Q(extracted_text__icontains=q)
-            | Q(folder_tokens__icontains=q)
-            | Q(customer_name__icontains=q)
-            | Q(job_type__icontains=q)
-            | Q(probable_job_number__icontains=q)
-        )
-
-        results = list(qs.order_by("-created")[:limit])
-
-    results = apply_match_reasons(results, q, mode)
+    elif q:
+        results = hybrid_search_for_user(request.user, q=q, limit=limit)
+        results = filter_images_to_folder_scope(results, search_folder)
+        results = apply_match_reasons(results, q, "hybrid")
 
     ctx = {
         "q": q,
@@ -801,7 +768,6 @@ def ui_search(request):
         return render(request, "indexer/partials/search_results.html", ctx)
 
     return render(request, "indexer/ui_search.html", ctx)
-
 
 @login_required
 def ui_item(request, image_id):
