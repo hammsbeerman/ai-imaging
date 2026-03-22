@@ -9,25 +9,17 @@ set -euo pipefail
 # Supports:
 #   service <start|stop|restart|status> <service-name>
 #   queue   <purge|count>               <queue-name>
-#
-# Design:
-# - Called by Django on the WEB box through sudo
-# - Web/beat services are handled locally
-# - Worker services and queue actions are routed over SSH to the worker box
-# - Only explicitly allowlisted services and queues are accepted
 ###############################################################################
 
 ###############################################################################
 # CONFIG
 ###############################################################################
 
-# Paths used on the WORKER box for queue commands.
 REMOTE_APP_ROOT="/opt/media-index-prod/media_index"
 REMOTE_VENV="/opt/media-index-prod/venv"
 REMOTE_MANAGE_PY="$REMOTE_APP_ROOT/manage.py"
 REMOTE_PYTHON_BIN="$REMOTE_VENV/bin/python"
 
-# SSH settings for worker node
 SSH_BIN="/usr/bin/ssh"
 SSH_OPTS=(
   -o BatchMode=yes
@@ -35,35 +27,33 @@ SSH_OPTS=(
   -o ConnectTimeout=10
 )
 
-# Worker host/user
 WORKER_HOST="ubuntu@192.168.0.66"
-
-# Local systemctl binary
 SYSTEMCTL_BIN="/bin/systemctl"
 
 ###############################################################################
 # ALLOWLISTS
 ###############################################################################
 
-# Services handled on the web box
 LOCAL_SERVICES=(
   "media-index-gunicorn"
   "media-index-celery-beat"
 )
 
-# Services handled on the worker box
 REMOTE_WORKER_SERVICES=(
   "media-index-celery-worker"
   "media-index-celery-worker-ops"
   "media-index-celery-worker-preview"
-  "media-index-celery-worker-docs"
+  "media-index-celery-worker-text"
+  "media-index-celery-worker-embedding"
+  "media-index-celery-worker-mail"
+  "media-index-celery-worker-metadata"
+  "media-index-celery-worker-ocr"
+  "media-index-celery-worker-scan"
 )
 
-# Allowed queues
 ALLOWED_QUEUES=(
   "ops"
   "preview"
-  "docs"
   "scan"
   "ocr"
   "mail"
@@ -94,8 +84,9 @@ Usage:
 Examples:
   media-index-ops service restart media-index-celery-worker-preview
   media-index-ops service restart media-index-celery-beat
+  media-index-ops service status media-index-celery-worker-text
   media-index-ops queue count preview
-  media-index-ops queue purge docs
+  media-index-ops queue purge text
 EOF
   exit 2
 }

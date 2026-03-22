@@ -15,7 +15,6 @@ class OpsActionSpec:
     label: str = ""
 
 
-# Adjust these to match your real service names.
 SYSTEMD_SERVICES: Dict[str, str] = {
     "web": "media-index-gunicorn",
     "beat": "media-index-celery-beat",
@@ -26,12 +25,10 @@ SYSTEMD_SERVICES: Dict[str, str] = {
     "mail": "media-index-celery-worker-mail",
     "metadata": "media-index-celery-worker-metadata",
     "ocr": "media-index-celery-worker-ocr",
-    "scan": "media-index-celery-worker-scan"
-
+    "scan": "media-index-celery-worker-scan",
+    "control": "media-index-celery-worker-control",
 }
 
-
-# Adjust these to match your real celery queue names.
 CELERY_QUEUES: Dict[str, str] = {
     "ops": "ops",
     "preview": "preview",
@@ -53,34 +50,37 @@ def build_allowed_actions() -> Dict[Tuple[str, str], OpsActionSpec]:
     actions: Dict[Tuple[str, str], OpsActionSpec] = {}
 
     for target, service_name in SYSTEMD_SERVICES.items():
+        pretty = target.replace("_", " ").title()
+
         actions[("start", target)] = OpsActionSpec(
             action="start",
             target=target,
             command=_wrapper_cmd("service", "start", service_name),
-            label=f"Start {target}",
+            label=f"Start {pretty}",
         )
         actions[("stop", target)] = OpsActionSpec(
             action="stop",
             target=target,
             command=_wrapper_cmd("service", "stop", service_name),
             confirm=True,
-            label=f"Stop {target}",
+            label=f"Stop {pretty}",
         )
         actions[("restart", target)] = OpsActionSpec(
             action="restart",
             target=target,
             command=_wrapper_cmd("service", "restart", service_name),
             confirm=True,
-            label=f"Restart {target}",
+            label=f"Restart {pretty}",
         )
 
     for target, queue_name in CELERY_QUEUES.items():
+        pretty = target.replace("_", " ").title()
         actions[("purge", target)] = OpsActionSpec(
             action="purge",
             target=target,
             command=_wrapper_cmd("queue", "purge", queue_name),
             confirm=True,
-            label=f"Purge {target} queue",
+            label=f"Purge {pretty} Queue",
         )
 
     return actions
@@ -148,12 +148,13 @@ def get_service_status(target: str, timeout: int = 30) -> str:
         timeout=timeout,
         check=False,
     )
-    if result.returncode != 0:
-        return "unknown"
 
-    status = (result.stdout or "").strip().lower()
-    if status in {"active", "inactive", "failed", "activating", "deactivating"}:
-        return status
+    raw = ((result.stdout or "") + "\n" + (result.stderr or "")).strip().lower()
+
+    for known in ("active", "inactive", "failed", "activating", "deactivating"):
+        if raw == known or f"\n{known}\n" in f"\n{raw}\n" or raw.startswith(known):
+            return known
+
     return "unknown"
 
 

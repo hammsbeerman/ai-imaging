@@ -1,144 +1,79 @@
-<div
-  id="ops-controls-card"
-  hx-get="{% url 'indexer_ops:ops_status_partial' %}"
-  hx-trigger="every 15s"
-  hx-swap="outerHTML"
->
-  <div class="card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <div>
-        <strong>Ops Controls</strong>
-      </div>
-      <div class="d-flex align-items-center gap-2">
-        <small class="text-muted">
-          Updated:
-          {% if ops_status_updated_at %}
-            {{ ops_status_updated_at|date:"n/j/Y g:i:s A" }}
-          {% else %}
-            now
-          {% endif %}
-        </small>
+<div class="col-12 col-lg-4">
+  <h6 class="mb-3">Clear Backlogs</h6>
 
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-secondary"
-          hx-get="{% url 'indexer_ops:ops_status_partial' %}"
-          hx-target="#ops-controls-card"
-          hx-swap="outerHTML"
-        >
-          Refresh
-        </button>
-      </div>
+  <div class="small text-muted fw-semibold mb-2">Primary Pipeline</div>
+
+  <div class="mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Scan Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.scan.count %}
     </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="scan" btn_class="btn-danger" label="Purge Scan Queue" confirm_text="Purge all queued scan jobs? This does not stop active jobs." %}
+  </div>
 
-    <div class="card-body">
-      <div class="row g-4">
-
-        <div class="col-12 col-lg-4">
-          <h6 class="mb-3">Workers / Services</h6>
-
-          <div class="mb-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Preview Worker</div>
-              {% include "indexer/partials/ops_service_badge.html" with status=ops_status.services.preview.status %}
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-              {% include "indexer/partials/ops_form_button.html" with action="start" target="preview" btn_class="btn-outline-success" label="Start" %}
-              {% include "indexer/partials/ops_form_button.html" with action="stop" target="preview" btn_class="btn-outline-danger" label="Stop" confirm_text="Stop preview worker?" %}
-              {% include "indexer/partials/ops_form_button.html" with action="restart" target="preview" btn_class="btn-warning" label="Restart" confirm_text="Restart preview worker?" %}
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Ops Worker</div>
-              {% include "indexer/partials/ops_service_badge.html" with status=ops_status.services.ops.status %}
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-              {% include "indexer/partials/ops_form_button.html" with action="start" target="ops" btn_class="btn-outline-success" label="Start" %}
-              {% include "indexer/partials/ops_form_button.html" with action="stop" target="ops" btn_class="btn-outline-danger" label="Stop" confirm_text="Stop ops worker?" %}
-              {% include "indexer/partials/ops_form_button.html" with action="restart" target="ops" btn_class="btn-warning" label="Restart" confirm_text="Restart ops worker?" %}
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Docs Worker</div>
-              {% include "indexer/partials/ops_service_badge.html" with status=ops_status.services.docs.status %}
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-              {% include "indexer/partials/ops_form_button.html" with action="start" target="docs" btn_class="btn-outline-success" label="Start" %}
-              {% include "indexer/partials/ops_form_button.html" with action="stop" target="docs" btn_class="btn-outline-danger" label="Stop" confirm_text="Stop docs worker?" %}
-              {% include "indexer/partials/ops_form_button.html" with action="restart" target="docs" btn_class="btn-warning" label="Restart" confirm_text="Restart docs worker?" %}
-            </div>
-          </div>
-
-          <div class="mb-0">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Web</div>
-              {% include "indexer/partials/ops_service_badge.html" with status=ops_status.services.web.status %}
-            </div>
-            <div class="d-flex flex-wrap gap-2 mb-3">
-              {% include "indexer/partials/ops_form_button.html" with action="restart" target="web" btn_class="btn-outline-secondary" label="Restart Web" confirm_text="Restart web service?" %}
-            </div>
-
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Beat</div>
-              {% include "indexer/partials/ops_service_badge.html" with status=ops_status.services.beat.status %}
-            </div>
-            <div class="d-flex flex-wrap gap-2">
-              {% include "indexer/partials/ops_form_button.html" with action="restart" target="beat" btn_class="btn-outline-secondary" label="Restart Beat" confirm_text="Restart celery beat?" %}
-            </div>
-          </div>
-        </div>
-
-        <div class="col-12 col-lg-4">
-          <h6 class="mb-3">Clear Backlogs</h6>
-
-          <div class="mb-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Preview Queue</div>
-              {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.preview.count %}
-            </div>
-            {% include "indexer/partials/ops_form_button.html" with action="purge" target="preview" btn_class="btn-danger" label="Purge Preview Queue" confirm_text="Purge all queued preview jobs? This does not stop active jobs." %}
-          </div>
-
-          <div class="mb-3">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Ops Queue</div>
-              {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.ops.count %}
-            </div>
-            {% include "indexer/partials/ops_form_button.html" with action="purge" target="ops" btn_class="btn-danger" label="Purge Ops Queue" confirm_text="Purge all queued ops jobs? This does not stop active jobs." %}
-          </div>
-
-          <div class="mb-0">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <div class="fw-semibold">Docs Queue</div>
-              {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.docs.count %}
-            </div>
-            {% include "indexer/partials/ops_form_button.html" with action="purge" target="docs" btn_class="btn-danger" label="Purge Docs Queue" confirm_text="Purge all queued docs jobs? This does not stop active jobs." %}
-          </div>
-        </div>
-
-        <div class="col-12 col-lg-4">
-          <h6 class="mb-3">Notes</h6>
-          <div class="small text-muted">
-            <p class="mb-2">
-              Queue counts are broker backlog only.
-            </p>
-            <p class="mb-2">
-              Purge removes queued jobs still waiting in the broker.
-            </p>
-            <p class="mb-2">
-              It does not stop tasks already reserved or actively running.
-            </p>
-            <p class="mb-0">
-              If a worker is inactive or failed, restart it after purging or cleaning stale jobs.
-            </p>
-          </div>
-        </div>
-
-      </div>
+  <div class="mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Preview Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.preview.count %}
     </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="preview" btn_class="btn-danger" label="Purge Preview Queue" confirm_text="Purge all queued preview jobs? This does not stop active jobs." %}
+  </div>
+
+  <div class="mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Text Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.text.count %}
+    </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="text" btn_class="btn-danger" label="Purge Text Queue" confirm_text="Purge all queued text jobs? This does not stop active jobs." %}
+  </div>
+
+  <div class="mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Metadata Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.metadata.count %}
+    </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="metadata" btn_class="btn-danger" label="Purge Metadata Queue" confirm_text="Purge all queued metadata jobs? This does not stop active jobs." %}
+  </div>
+
+  <div class="mb-4">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Embedding Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.embedding.count %}
+    </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="embedding" btn_class="btn-danger" label="Purge Embedding Queue" confirm_text="Purge all queued embedding jobs? This does not stop active jobs." %}
+  </div>
+
+  <div class="small text-muted fw-semibold mb-2">Support Queues</div>
+
+  <div class="mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Ops Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.ops.count %}
+    </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="ops" btn_class="btn-outline-danger" label="Purge Ops Queue" confirm_text="Purge all queued ops jobs? This does not stop active jobs." %}
+  </div>
+
+  <div class="mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">OCR Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.ocr.count %}
+    </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="ocr" btn_class="btn-outline-danger" label="Purge OCR Queue" confirm_text="Purge all queued OCR jobs? This does not stop active jobs." %}
+  </div>
+
+  <div class="mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Mail Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.mail.count %}
+    </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="mail" btn_class="btn-outline-danger" label="Purge Mail Queue" confirm_text="Purge all queued mail jobs? This does not stop active jobs." %}
+  </div>
+
+  <div class="mb-0">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="fw-semibold">Control Queue</div>
+      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.control.count %}
+    </div>
+    {% include "indexer/partials/ops_form_button.html" with action="purge" target="control" btn_class="btn-outline-danger" label="Purge Control Queue" confirm_text="Purge all queued control jobs? This does not stop active jobs." %}
   </div>
 </div>
