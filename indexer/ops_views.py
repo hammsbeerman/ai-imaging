@@ -54,7 +54,7 @@ def _log_ops_result(request: HttpRequest, action: str, target: str, result) -> N
 def run_dashboard_ops_action(request: HttpRequest):
     action = (request.POST.get("action") or "").strip().lower()
     target = (request.POST.get("target") or "").strip().lower()
-    next_url = (request.POST.get("next") or request.META.get("HTTP_REFERER") or "/ui/").strip()
+    next_url = (request.POST.get("next") or "/ui/").strip()
 
     spec = get_action_spec(action, target)
     if spec is None:
