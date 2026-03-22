@@ -1,12 +1,28 @@
 <div class="col-12 col-lg-4">
-  <h6 class="mb-3">Clear Backlogs</h6>
+  <h6 class="mb-3 d-flex justify-content-between align-items-center">
+    <span>Clear Backlogs</span>
+    <small class="text-muted">
+      {% if queue_snapshot_updated_at %}
+        Updated {{ queue_snapshot_updated_at|timesince }} ago
+      {% else %}
+        No snapshot yet
+      {% endif %}
+    </small>
+  </h6>
+
+  {% if queue_snapshot and queue_snapshot.queue_snapshot_error %}
+    <div class="alert alert-warning py-2 mb-3 small">
+      <strong>Queue snapshot warning:</strong>
+      {{ queue_snapshot.queue_snapshot_error }}
+    </div>
+  {% endif %}
 
   <div class="small text-muted fw-semibold mb-2">Primary Pipeline</div>
 
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Scan Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.scan.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.scan_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="scan" btn_class="btn-danger" label="Purge Scan Queue" confirm_text="Purge all queued scan jobs? This does not stop active jobs." %}
   </div>
@@ -14,7 +30,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Preview Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.preview.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.preview_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="preview" btn_class="btn-danger" label="Purge Preview Queue" confirm_text="Purge all queued preview jobs? This does not stop active jobs." %}
   </div>
@@ -22,7 +38,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Text Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.text.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.text_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="text" btn_class="btn-danger" label="Purge Text Queue" confirm_text="Purge all queued text jobs? This does not stop active jobs." %}
   </div>
@@ -30,7 +46,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Metadata Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.metadata.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.metadata_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="metadata" btn_class="btn-danger" label="Purge Metadata Queue" confirm_text="Purge all queued metadata jobs? This does not stop active jobs." %}
   </div>
@@ -38,7 +54,7 @@
   <div class="mb-4">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Embedding Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.embedding.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.embedding_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="embedding" btn_class="btn-danger" label="Purge Embedding Queue" confirm_text="Purge all queued embedding jobs? This does not stop active jobs." %}
   </div>
@@ -48,7 +64,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Ops Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.ops.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ops_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="ops" btn_class="btn-outline-danger" label="Purge Ops Queue" confirm_text="Purge all queued ops jobs? This does not stop active jobs." %}
   </div>
@@ -56,7 +72,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">OCR Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.ocr.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ocr_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="ocr" btn_class="btn-outline-danger" label="Purge OCR Queue" confirm_text="Purge all queued OCR jobs? This does not stop active jobs." %}
   </div>
@@ -64,7 +80,7 @@
   <div class="mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Mail Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.mail.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.mail_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="mail" btn_class="btn-outline-danger" label="Purge Mail Queue" confirm_text="Purge all queued mail jobs? This does not stop active jobs." %}
   </div>
@@ -72,7 +88,7 @@
   <div class="mb-0">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <div class="fw-semibold">Control Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=ops_status.queues.control.count %}
+      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.control_queue_depth|default:0 %}
     </div>
     {% include "indexer/partials/ops_form_button.html" with action="purge" target="control" btn_class="btn-outline-danger" label="Purge Control Queue" confirm_text="Purge all queued control jobs? This does not stop active jobs." %}
   </div>

@@ -488,6 +488,18 @@ class QueueHealthSnapshot(models.Model):
     oldest_embedding_pending_at = models.DateTimeField(null=True, blank=True)
     oldest_embedding_processing_at = models.DateTimeField(null=True, blank=True)
 
+    ops_queue_depth = models.BigIntegerField(default=0)
+    preview_queue_depth = models.BigIntegerField(default=0)
+    scan_queue_depth = models.BigIntegerField(default=0)
+    ocr_queue_depth = models.BigIntegerField(default=0)
+    mail_queue_depth = models.BigIntegerField(default=0)
+    control_queue_depth = models.BigIntegerField(default=0)
+    embedding_queue_depth = models.BigIntegerField(default=0)
+    metadata_queue_depth = models.BigIntegerField(default=0)
+    text_queue_depth = models.BigIntegerField(default=0)
+
+    queue_snapshot_error = models.TextField(blank=True, default="")
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -521,3 +533,5 @@ class TaskRunMetric(models.Model):
 # Additional document/email models
 from .models_documents import *  # noqa
 from .models_mail import *  # noqa
+
+

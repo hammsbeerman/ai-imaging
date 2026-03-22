@@ -114,7 +114,7 @@ run_remote_systemctl() {
   local service="$2"
 
   log "Running on worker: $SYSTEMCTL_BIN $verb $service via $WORKER_HOST"
-  exec "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" \
+  exec /usr/bin/sudo -u ubuntu "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" \
     "sudo '$SYSTEMCTL_BIN' '$verb' '$service'"
 }
 
@@ -123,7 +123,7 @@ run_remote_queue_command() {
   local queue="$2"
 
   log "Running queue action on worker: $verb $queue via $WORKER_HOST"
-  exec "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" \
+  exec /usr/bin/sudo -u ubuntu "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" \
     "test -x '$REMOTE_PYTHON_BIN' && test -f '$REMOTE_MANAGE_PY' && cd '$REMOTE_APP_ROOT' && '$REMOTE_PYTHON_BIN' '$REMOTE_MANAGE_PY' ops_queue '$verb' '$queue'"
 }
 
