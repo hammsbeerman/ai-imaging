@@ -68,7 +68,7 @@ ALLOWED_QUEUES=(
 ###############################################################################
 
 log() {
-  printf '[media-index-ops] %s\n' "$*"
+  printf '[media-index-ops] %s\n' "$*" >&2
 }
 
 err() {
