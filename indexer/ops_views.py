@@ -5,10 +5,11 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpRequest, HttpResponseBadRequest, HttpResponseRedirect
-from django.shortcuts import redirect
-from django.views.decorators.http import require_POST
+from django.shortcuts import redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
 
-from .ops_actions import ALLOWED_ACTIONS, get_action_spec, run_ops_action
+from .ops_actions import ALLOWED_ACTIONS, collect_ops_status, get_action_spec, run_ops_action
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,6 @@ def _log_ops_result(request: HttpRequest, action: str, target: str, result) -> N
 
     if TaskLog is not None:
         try:
-            # Adjust field names here if your TaskLog differs.
             TaskLog.objects.create(
                 source="ops_ui",
                 level="info" if result.returncode == 0 else "error",
@@ -79,8 +79,16 @@ def run_dashboard_ops_action(request: HttpRequest):
     return HttpResponseRedirect(next_url)
 
 
+@login_required
+@user_passes_test(_is_ops_user)
+@require_GET
+def ops_status_partial(request: HttpRequest):
+    context = {
+        "ops_status": collect_ops_status(),
+        "ops_status_updated_at": timezone.localtime(),
+    }
+    return render(request, "indexer/partials/ops_controls.html", context)
+
+
 def ops_action_specs_for_template():
-    """
-    Handy if you want to pass these from a view later.
-    """
     return sorted(ALLOWED_ACTIONS.values(), key=lambda x: (x.target, x.action))

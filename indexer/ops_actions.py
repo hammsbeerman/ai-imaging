@@ -112,3 +112,65 @@ def describe_command(action: str, target: str) -> str:
     if not spec:
         return ""
     return shlex.join(spec.command)
+
+
+def get_queue_count(target: str, timeout: int = 30) -> int | None:
+    queue_name = CELERY_QUEUES.get(target)
+    if not queue_name:
+        return None
+
+    result = subprocess.run(
+        _wrapper_cmd("queue", "count", queue_name),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+
+    raw = (result.stdout or "").strip()
+    try:
+        return int(raw)
+    except Exception:
+        return None
+
+
+def get_service_status(target: str, timeout: int = 30) -> str:
+    service_name = SYSTEMD_SERVICES.get(target)
+    if not service_name:
+        return "unknown"
+
+    result = subprocess.run(
+        _wrapper_cmd("service", "status", service_name),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    if result.returncode != 0:
+        return "unknown"
+
+    status = (result.stdout or "").strip().lower()
+    if status in {"active", "inactive", "failed", "activating", "deactivating"}:
+        return status
+    return "unknown"
+
+
+def collect_ops_status() -> dict:
+    return {
+        "services": {
+            key: {
+                "name": SYSTEMD_SERVICES[key],
+                "status": get_service_status(key),
+            }
+            for key in SYSTEMD_SERVICES.keys()
+        },
+        "queues": {
+            key: {
+                "name": CELERY_QUEUES[key],
+                "count": get_queue_count(key),
+            }
+            for key in CELERY_QUEUES.keys()
+        },
+    }

@@ -73,6 +73,8 @@ from indexer.services.preview_health import (
 )
 from indexer.models_documents import Document
 
+from .ops_actions import collect_ops_status
+
 
 def _allowed_root_ids(user) -> set[int]:
     if not getattr(user, "is_authenticated", False):
@@ -605,6 +607,8 @@ def ui_home(request):
         "preview_complete": stats.preview_ok or 0,
         "text_complete": stats.text_ok or 0,
         "metadata_complete": stats.metadata_ok or 0,
+        "ops_status" = collect_ops_status(),
+        "ops_status_updated_at" = timezone.localtime()
     }
 
     return render(request, "indexer/ui_home.html", context)

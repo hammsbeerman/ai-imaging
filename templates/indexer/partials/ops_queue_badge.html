@@ -1,0 +1,7 @@
+{% if count is None %}
+  <span class="badge text-bg-dark">unknown</span>
+{% elif count == 0 %}
+  <span class="badge text-bg-success">0 queued</span>
+{% else %}
+  <span class="badge text-bg-danger">{{ count }} queued</span>
+{% endif %}

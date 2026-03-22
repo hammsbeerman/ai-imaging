@@ -21,10 +21,11 @@ set -euo pipefail
 # CONFIG
 ###############################################################################
 
-# Web/app box paths
-APP_ROOT="/opt/media-index-prod/media_index"
-VENV="/opt/media-index-prod/venv"
-MANAGE_PY="$APP_ROOT/manage.py"
+# Paths used on the WORKER box for queue commands.
+REMOTE_APP_ROOT="/opt/media-index-prod/media_index"
+REMOTE_VENV="/opt/media-index-prod/venv"
+REMOTE_MANAGE_PY="$REMOTE_APP_ROOT/manage.py"
+REMOTE_PYTHON_BIN="$REMOTE_VENV/bin/python"
 
 # SSH settings for worker node
 SSH_BIN="/usr/bin/ssh"
@@ -34,14 +35,11 @@ SSH_OPTS=(
   -o ConnectTimeout=10
 )
 
-# Change this to your real worker host/user
+# Worker host/user
 WORKER_HOST="ubuntu@192.168.0.66"
 
 # Local systemctl binary
 SYSTEMCTL_BIN="/bin/systemctl"
-
-# Python binary inside venv
-PYTHON_BIN="$VENV/bin/python"
 
 ###############################################################################
 # ALLOWLISTS
@@ -65,6 +63,7 @@ REMOTE_WORKER_SERVICES=(
 ALLOWED_QUEUES=(
   "ops"
   "preview"
+  "docs"
   "scan"
   "ocr"
   "mail"
@@ -111,14 +110,6 @@ contains() {
   return 1
 }
 
-require_file() {
-  local path="$1"
-  [[ -e "$path" ]] || {
-    err "Required path missing: $path"
-    exit 10
-  }
-}
-
 run_local_systemctl() {
   local verb="$1"
   local service="$2"
@@ -131,20 +122,18 @@ run_remote_systemctl() {
   local verb="$1"
   local service="$2"
 
-  log "Running on worker: $service via $WORKER_HOST"
-  exec "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" "sudo $SYSTEMCTL_BIN $verb $service"
+  log "Running on worker: $SYSTEMCTL_BIN $verb $service via $WORKER_HOST"
+  exec "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" \
+    "sudo '$SYSTEMCTL_BIN' '$verb' '$service'"
 }
 
 run_remote_queue_command() {
   local verb="$1"
   local queue="$2"
 
-  require_file "$PYTHON_BIN"
-  require_file "$MANAGE_PY"
-
   log "Running queue action on worker: $verb $queue via $WORKER_HOST"
   exec "$SSH_BIN" "${SSH_OPTS[@]}" "$WORKER_HOST" \
-    "cd '$APP_ROOT' && '$PYTHON_BIN' '$MANAGE_PY' ops_queue '$verb' '$queue'"
+    "test -x '$REMOTE_PYTHON_BIN' && test -f '$REMOTE_MANAGE_PY' && cd '$REMOTE_APP_ROOT' && '$REMOTE_PYTHON_BIN' '$REMOTE_MANAGE_PY' ops_queue '$verb' '$queue'"
 }
 
 ###############################################################################

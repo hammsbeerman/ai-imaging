@@ -1,0 +1,13 @@
+{% if status == "active" %}
+  <span class="badge text-bg-success">active</span>
+{% elif status == "inactive" %}
+  <span class="badge text-bg-secondary">inactive</span>
+{% elif status == "failed" %}
+  <span class="badge text-bg-danger">failed</span>
+{% elif status == "activating" %}
+  <span class="badge text-bg-warning">activating</span>
+{% elif status == "deactivating" %}
+  <span class="badge text-bg-warning">deactivating</span>
+{% else %}
+  <span class="badge text-bg-dark">unknown</span>
+{% endif %}
