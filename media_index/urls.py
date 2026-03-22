@@ -53,6 +53,7 @@ from indexer.views_mail import (
 )
 
 urlpatterns = [
+    path("", include("indexer.ops_urls")),
     path("admin/", admin.site.urls),
 
     # Public

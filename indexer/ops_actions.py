@@ -1,0 +1,114 @@
+from __future__ import annotations
+
+import shlex
+import subprocess
+from dataclasses import dataclass
+from typing import Dict, Tuple
+
+
+@dataclass(frozen=True)
+class OpsActionSpec:
+    action: str
+    target: str
+    command: Tuple[str, ...]
+    confirm: bool = False
+    label: str = ""
+
+
+# Adjust these to match your real service names.
+SYSTEMD_SERVICES: Dict[str, str] = {
+    "web": "media-index-gunicorn",
+    "beat": "media-index-celery-beat",
+    "ops": "media-index-celery-worker-ops",
+    "preview": "media-index-celery-worker-preview",
+    "text": "media-index-celery-worker-text",
+    "embedding": "media-index-celery-worker-embedding",
+    "mail": "media-index-celery-worker-mail",
+    "metadata": "media-index-celery-worker-metadata",
+    "ocr": "media-index-celery-worker-ocr",
+    "scan": "media-index-celery-worker-scan"
+
+}
+
+
+# Adjust these to match your real celery queue names.
+CELERY_QUEUES: Dict[str, str] = {
+    "ops": "ops",
+    "preview": "preview",
+    "scan": "scan",
+    "ocr": "ocr",
+    "mail": "mail",
+    "control": "control",
+    "embedding": "embedding",
+    "metadata": "metadata",
+    "text": "text",
+}
+
+
+def _wrapper_cmd(*parts: str) -> Tuple[str, ...]:
+    return ("/usr/bin/sudo", "/usr/local/bin/media-index-ops", *parts)
+
+
+def build_allowed_actions() -> Dict[Tuple[str, str], OpsActionSpec]:
+    actions: Dict[Tuple[str, str], OpsActionSpec] = {}
+
+    for target, service_name in SYSTEMD_SERVICES.items():
+        actions[("start", target)] = OpsActionSpec(
+            action="start",
+            target=target,
+            command=_wrapper_cmd("service", "start", service_name),
+            label=f"Start {target}",
+        )
+        actions[("stop", target)] = OpsActionSpec(
+            action="stop",
+            target=target,
+            command=_wrapper_cmd("service", "stop", service_name),
+            confirm=True,
+            label=f"Stop {target}",
+        )
+        actions[("restart", target)] = OpsActionSpec(
+            action="restart",
+            target=target,
+            command=_wrapper_cmd("service", "restart", service_name),
+            confirm=True,
+            label=f"Restart {target}",
+        )
+
+    for target, queue_name in CELERY_QUEUES.items():
+        actions[("purge", target)] = OpsActionSpec(
+            action="purge",
+            target=target,
+            command=_wrapper_cmd("queue", "purge", queue_name),
+            confirm=True,
+            label=f"Purge {target} queue",
+        )
+
+    return actions
+
+
+ALLOWED_ACTIONS = build_allowed_actions()
+
+
+def get_action_spec(action: str, target: str) -> OpsActionSpec | None:
+    return ALLOWED_ACTIONS.get((action, target))
+
+
+def run_ops_action(action: str, target: str, timeout: int = 120) -> subprocess.CompletedProcess:
+    spec = get_action_spec(action, target)
+    if not spec:
+        raise ValueError(f"Unsupported ops action: action={action!r} target={target!r}")
+
+    return subprocess.run(
+        spec.command,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def describe_command(action: str, target: str) -> str:
+    spec = get_action_spec(action, target)
+    if not spec:
+        return ""
+    return shlex.join(spec.command)
