@@ -8,6 +8,7 @@ from django.http import HttpRequest, HttpResponseBadRequest, HttpResponseRedirec
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
+from urllib.parse import urlsplit
 
 from .ops_actions import ALLOWED_ACTIONS, collect_ops_status, get_action_spec, run_ops_action
 
@@ -48,19 +49,25 @@ def _log_ops_result(request: HttpRequest, action: str, target: str, result) -> N
         logger.error(msg)
 
 
+from urllib.parse import urlsplit
+
 @login_required
 @user_passes_test(_is_ops_user)
 @require_POST
 def run_dashboard_ops_action(request: HttpRequest):
     action = (request.POST.get("action") or "").strip().lower()
     target = (request.POST.get("target") or "").strip().lower()
-    next_url = (request.POST.get("next") or "/ui/").strip()
 
-    while next_url.startswith("/ai/ai/"):
-        next_url = next_url.replace("/ai/ai/", "/ai/", 1)
+    raw_next = (request.POST.get("next") or "/ai/ui/").strip()
 
-    if not next_url.startswith("/"):
-        next_url = "/" + next_url
+    parts = urlsplit(raw_next)
+    next_path = parts.path or "/ai/ui/"
+
+    while next_path.startswith("/ai/ai/"):
+        next_path = next_path.replace("/ai/ai/", "/ai/", 1)
+
+    if not next_path.startswith("/"):
+        next_path = "/" + next_path
 
     spec = get_action_spec(action, target)
     if spec is None:
@@ -71,7 +78,7 @@ def run_dashboard_ops_action(request: HttpRequest):
     except Exception as exc:
         logger.exception("Ops action failed before completion")
         messages.error(request, f"{action} {target} failed: {exc}")
-        return redirect(next_url)
+        return HttpResponseRedirect(next_path)
 
     _log_ops_result(request, action, target, result)
 
@@ -82,7 +89,7 @@ def run_dashboard_ops_action(request: HttpRequest):
         short_err = err[-1] if err else "unknown error"
         messages.error(request, f"{spec.label} failed: {short_err}")
 
-    return HttpResponseRedirect(next_url)
+    return HttpResponseRedirect(next_path)
 
 
 @login_required
