@@ -56,6 +56,12 @@ def run_dashboard_ops_action(request: HttpRequest):
     target = (request.POST.get("target") or "").strip().lower()
     next_url = (request.POST.get("next") or "/ui/").strip()
 
+    while next_url.startswith("/ai/ai/"):
+        next_url = next_url.replace("/ai/ai/", "/ai/", 1)
+
+    if not next_url.startswith("/"):
+        next_url = "/" + next_url
+
     spec = get_action_spec(action, target)
     if spec is None:
         return HttpResponseBadRequest("Invalid ops action")
