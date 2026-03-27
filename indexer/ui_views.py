@@ -446,22 +446,24 @@ def ui_home(request):
     ]
 
     queue_summary = {
-        "scan": getattr(queue_snapshot, "scan_pending_dirs", 0) if queue_snapshot else 0,
-        "preview": getattr(queue_snapshot, "preview_pending", 0) if queue_snapshot else 0,
-        "text": getattr(queue_snapshot, "text_pending", 0) if queue_snapshot else 0,
-        "metadata": getattr(queue_snapshot, "metadata_pending", 0) if queue_snapshot else 0,
-        "embedding": getattr(queue_snapshot, "embedding_pending", 0) if queue_snapshot else 0,
+        "scan": getattr(queue_snapshot, "scan_queue_depth", 0) if queue_snapshot else 0,
+        "preview": getattr(queue_snapshot, "preview_queue_depth", 0) if queue_snapshot else 0,
+        "text": getattr(queue_snapshot, "text_queue_depth", 0) if queue_snapshot else 0,
+        "metadata": getattr(queue_snapshot, "metadata_queue_depth", 0) if queue_snapshot else 0,
+        "embedding": getattr(queue_snapshot, "embedding_queue_depth", 0) if queue_snapshot else 0,
     }
 
     scan_queue = {
         "pending_dirs": getattr(queue_snapshot, "scan_pending_dirs", 0) if queue_snapshot else 0,
         "retrying_dirs": getattr(queue_snapshot, "scan_retrying_dirs", 0) if queue_snapshot else 0,
         "done_dirs": getattr(queue_snapshot, "scan_done_dirs", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "scan_queue_depth", 0) if queue_snapshot else 0,
     }
 
     preview_queue = {
         "pending": getattr(queue_snapshot, "preview_pending", 0) if queue_snapshot else 0,
         "processing": getattr(queue_snapshot, "preview_processing", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "preview_queue_depth", 0) if queue_snapshot else 0,
         "oldest_pending_at": getattr(queue_snapshot, "oldest_preview_pending_at", None) if queue_snapshot else None,
         "oldest_processing_at": getattr(queue_snapshot, "oldest_preview_processing_at", None) if queue_snapshot else None,
     }
@@ -469,6 +471,7 @@ def ui_home(request):
     text_queue = {
         "pending": getattr(queue_snapshot, "text_pending", 0) if queue_snapshot else 0,
         "processing": getattr(queue_snapshot, "text_processing", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "text_queue_depth", 0) if queue_snapshot else 0,
         "oldest_pending_at": getattr(queue_snapshot, "oldest_text_pending_at", None) if queue_snapshot else None,
         "oldest_processing_at": getattr(queue_snapshot, "oldest_text_processing_at", None) if queue_snapshot else None,
     }
@@ -476,6 +479,7 @@ def ui_home(request):
     metadata_queue = {
         "pending": getattr(queue_snapshot, "metadata_pending", 0) if queue_snapshot else 0,
         "processing": getattr(queue_snapshot, "metadata_processing", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "metadata_queue_depth", 0) if queue_snapshot else 0,
         "oldest_pending_at": getattr(queue_snapshot, "oldest_metadata_pending_at", None) if queue_snapshot else None,
         "oldest_processing_at": getattr(queue_snapshot, "oldest_metadata_processing_at", None) if queue_snapshot else None,
     }
@@ -483,6 +487,7 @@ def ui_home(request):
     embedding_queue = {
         "pending": getattr(queue_snapshot, "embedding_pending", 0) if queue_snapshot else 0,
         "processing": getattr(queue_snapshot, "embedding_processing", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "embedding_queue_depth", 0) if queue_snapshot else 0,
         "oldest_pending_at": getattr(queue_snapshot, "oldest_embedding_pending_at", None) if queue_snapshot else None,
         "oldest_processing_at": getattr(queue_snapshot, "oldest_embedding_processing_at", None) if queue_snapshot else None,
     }
@@ -585,7 +590,7 @@ def ui_home(request):
 
     context = {
         "total_files": total_files,
-        "indexed_files": stats.indexed_files or 0,
+        "indexed_files": indexed,
         "duplicate_groups": stats.duplicate_groups or 0,
         "duplicate_items": stats.duplicate_items or 0,
         "text_quality": text_quality,
@@ -613,8 +618,6 @@ def ui_home(request):
         "text_complete": stats.text_ok or 0,
         "metadata_complete": stats.metadata_ok or 0,
         "queue_snapshot": queue_snapshot,
-        "queue_snapshot_updated_at": queue_snapshot_updated_at,
-
     }
 
     return render(request, "indexer/ui_home.html", context)
