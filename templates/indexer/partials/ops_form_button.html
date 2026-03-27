@@ -7,6 +7,6 @@
   {% csrf_token %}
   <input type="hidden" name="action" value="{{ action }}">
   <input type="hidden" name="target" value="{{ target }}">
-  <input type="hidden" name="next" value="/ui/">
+  <input type="hidden" name="next" value="{% url 'ui_home' %}">
   <button type="submit" class="btn btn-sm {{ btn_class }}">{{ label }}</button>
 </form>
