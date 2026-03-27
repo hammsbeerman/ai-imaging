@@ -5,10 +5,10 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpRequest, HttpResponseBadRequest, HttpResponseRedirect
-from django.shortcuts import redirect, render
+from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
-from urllib.parse import urlsplit
 
 from .ops_actions import ALLOWED_ACTIONS, collect_ops_status, get_action_spec, run_ops_action
 
@@ -49,8 +49,6 @@ def _log_ops_result(request: HttpRequest, action: str, target: str, result) -> N
         logger.error(msg)
 
 
-from urllib.parse import urlsplit
-
 @login_required
 @user_passes_test(_is_ops_user)
 @require_POST
@@ -58,27 +56,18 @@ def run_dashboard_ops_action(request: HttpRequest):
     action = (request.POST.get("action") or "").strip().lower()
     target = (request.POST.get("target") or "").strip().lower()
 
-    raw_next = (request.POST.get("next") or "/ai/ui/").strip()
-
-    parts = urlsplit(raw_next)
-    next_path = parts.path or "/ai/ui/"
-
-    while next_path.startswith("/ai/ai/"):
-        next_path = next_path.replace("/ai/ai/", "/ai/", 1)
-
-    if not next_path.startswith("/"):
-        next_path = "/" + next_path
-
     spec = get_action_spec(action, target)
     if spec is None:
         return HttpResponseBadRequest("Invalid ops action")
+
+    next_url = reverse("ui_home")
 
     try:
         result = run_ops_action(action, target, timeout=120)
     except Exception as exc:
         logger.exception("Ops action failed before completion")
         messages.error(request, f"{action} {target} failed: {exc}")
-        return HttpResponseRedirect(next_path)
+        return HttpResponseRedirect(next_url)
 
     _log_ops_result(request, action, target, result)
 
@@ -89,7 +78,7 @@ def run_dashboard_ops_action(request: HttpRequest):
         short_err = err[-1] if err else "unknown error"
         messages.error(request, f"{spec.label} failed: {short_err}")
 
-    return HttpResponseRedirect(next_path)
+    return HttpResponseRedirect(next_url)
 
 
 @login_required
