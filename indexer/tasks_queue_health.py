@@ -1,14 +1,28 @@
 from datetime import timedelta
+from urllib.parse import urlparse
 
+import redis
 from celery import shared_task
 from django.conf import settings
 from django.db import close_old_connections
 from django.db.models import Count, Min, Q
 from django.utils import timezone
-from kombu import Connection
 
 from indexer.models import Image, ProcessingStatus, PreviewStatus, QueueHealthSnapshot, ScanDir
 from indexer.tasks_metrics import record_task_metric
+
+
+QUEUE_MAP = {
+    "ops_queue_depth": "ops",
+    "preview_queue_depth": "preview",
+    "scan_queue_depth": "scan",
+    "ocr_queue_depth": "ocr",
+    "mail_queue_depth": "mail",
+    "control_queue_depth": "control",
+    "embedding_queue_depth": "embedding",
+    "metadata_queue_depth": "metadata",
+    "text_queue_depth": "text",
+}
 
 
 def _status_counts(field_name: str) -> dict:
@@ -21,47 +35,53 @@ def _status_counts(field_name: str) -> dict:
         unsupported=Count("id", filter=Q(**{field_name: ProcessingStatus.UNSUPPORTED})),
     )
 
-def _queue_depths() -> tuple[dict, str]:
+
+def _redis_client() -> redis.Redis:
     broker_url = getattr(settings, "CELERY_BROKER_URL", None)
     if not broker_url:
-        return {}, "CELERY_BROKER_URL not set"
+        raise RuntimeError("CELERY_BROKER_URL not set")
 
-    queue_map = {
-        "ops_queue_depth": "ops",
-        "preview_queue_depth": "preview",
-        "scan_queue_depth": "scan",
-        "ocr_queue_depth": "ocr",
-        "mail_queue_depth": "mail",
-        "control_queue_depth": "control",
-        "embedding_queue_depth": "embedding",
-        "metadata_queue_depth": "metadata",
-        "text_queue_depth": "text",
-    }
+    parsed = urlparse(broker_url)
+    if parsed.scheme not in {"redis", "rediss"}:
+        raise RuntimeError(f"Unsupported broker scheme: {parsed.scheme!r}")
 
+    db = 0
+    path = (parsed.path or "").strip("/")
+    if path:
+        try:
+            db = int(path)
+        except ValueError as exc:
+            raise RuntimeError(f"Invalid Redis DB in broker URL: {parsed.path!r}") from exc
+
+    return redis.Redis(
+        host=parsed.hostname or "127.0.0.1",
+        port=parsed.port or 6379,
+        password=parsed.password,
+        db=db,
+        ssl=(parsed.scheme == "rediss"),
+        decode_responses=False,
+        socket_timeout=5,
+        socket_connect_timeout=5,
+    )
+
+
+def _queue_depths() -> tuple[dict, str]:
     values: dict[str, int] = {}
     errors: list[str] = []
 
     try:
-        with Connection(broker_url) as conn:
-            channel = conn.channel()
+        client = _redis_client()
 
-            for field_name, queue_name in queue_map.items():
-                try:
-                    result = channel.queue_declare(queue=queue_name, passive=True)
+        for field_name, queue_name in QUEUE_MAP.items():
+            try:
+                # Missing Redis key should just read as 0.
+                values[field_name] = int(client.llen(queue_name) or 0)
+            except redis.RedisError as exc:
+                values[field_name] = 0
+                errors.append(f"{queue_name}: {exc}")
 
-                    if hasattr(result, "message_count"):
-                        count = result.message_count
-                    elif isinstance(result, (tuple, list)) and len(result) >= 2:
-                        count = result[1]
-                    else:
-                        count = 0
-
-                    values[field_name] = int(count or 0)
-                except Exception as exc:
-                    values[field_name] = 0
-                    errors.append(f"{queue_name}: {exc}")
     except Exception as exc:
-        for field_name in queue_map:
+        for field_name in QUEUE_MAP:
             values[field_name] = 0
         errors.append(str(exc))
 

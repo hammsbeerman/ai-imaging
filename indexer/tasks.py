@@ -97,9 +97,22 @@ def scan_task():
                 best_len = len(pref)
         return best
 
+    now = timezone.now()
+    base_scan_path = (s.scan_path or "").rstrip("/").replace("\\", "/")
+
+    if base_scan_path:
+        ScanDir.objects.update_or_create(
+            path=base_scan_path,
+            defaults={
+                "done": False,
+                "retry_at": now,
+                "last_error": None,
+            },
+        )
+
     batch = list(
         ScanDir.objects
-        .filter(done=False, retry_at__lte=timezone.now())
+        .filter(done=False, retry_at__lte=now)
         .order_by("retry_at", "updated")[:50]
     )
 
@@ -110,6 +123,7 @@ def scan_task():
 
     dirs_scanned = 0
     dirs_enqueued = 0
+    dirs_reopened = 0
     dirs_skipped = 0
     errors = 0
 
@@ -184,10 +198,30 @@ def scan_task():
                     )
 
             if child_dirs:
-                existing_dirs = set(
-                    ScanDir.objects.filter(path__in=child_dirs).values_list("path", flat=True)
-                )
-                to_create_dirs = [ScanDir(path=p) for p in child_dirs if p not in existing_dirs]
+                existing_dir_rows = {
+                    d.path: d
+                    for d in ScanDir.objects.filter(path__in=child_dirs)
+                }
+
+                to_create_dirs = []
+                to_reopen_dirs = []
+
+                for child_path in child_dirs:
+                    existing = existing_dir_rows.get(child_path)
+                    if existing is None:
+                        to_create_dirs.append(
+                            ScanDir(
+                                path=child_path,
+                                done=False,
+                                retry_at=now,
+                            )
+                        )
+                    elif existing.done:
+                        existing.done = False
+                        existing.retry_at = now
+                        existing.last_error = None
+                        to_reopen_dirs.append(existing)
+
                 if to_create_dirs:
                     ScanDir.objects.bulk_create(
                         to_create_dirs,
@@ -195,6 +229,14 @@ def scan_task():
                         batch_size=1000,
                     )
                     dirs_enqueued += len(to_create_dirs)
+
+                if to_reopen_dirs:
+                    ScanDir.objects.bulk_update(
+                        to_reopen_dirs,
+                        ["done", "retry_at", "last_error"],
+                        batch_size=1000,
+                    )
+                    dirs_reopened += len(to_reopen_dirs)
 
             if candidates:
                 paths = [c[0] for c in candidates]
@@ -307,7 +349,8 @@ def scan_task():
     log(
         "scan",
         "finished "
-        f"dirs_scanned={dirs_scanned} dirs_enqueued={dirs_enqueued} dirs_skipped={dirs_skipped} "
+        f"dirs_scanned={dirs_scanned} dirs_enqueued={dirs_enqueued} "
+        f"dirs_reopened={dirs_reopened} dirs_skipped={dirs_skipped} "
         f"files_seen={files_seen} files_indexable={files_indexable} "
         f"images_created={images_created} images_existing={images_existing} "
         f"errors={errors}"
@@ -317,6 +360,7 @@ def scan_task():
     return {
         "dirs_scanned": dirs_scanned,
         "dirs_enqueued": dirs_enqueued,
+        "dirs_reopened": dirs_reopened,
         "dirs_skipped": dirs_skipped,
         "files_seen": files_seen,
         "files_indexable": files_indexable,
