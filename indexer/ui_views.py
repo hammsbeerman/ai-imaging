@@ -492,6 +492,30 @@ def ui_home(request):
         "oldest_processing_at": getattr(queue_snapshot, "oldest_embedding_processing_at", None) if queue_snapshot else None,
     }
 
+    text_queue = {
+        "pending": getattr(queue_snapshot, "text_pending", 0) if queue_snapshot else 0,
+        "processing": getattr(queue_snapshot, "text_processing", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "text_queue_depth", 0) if queue_snapshot else 0,
+        "oldest_pending_at": getattr(queue_snapshot, "oldest_text_pending_at", None) if queue_snapshot else None,
+        "oldest_processing_at": getattr(queue_snapshot, "oldest_text_processing_at", None) if queue_snapshot else None,
+    }
+
+    metadata_queue = {
+        "pending": getattr(queue_snapshot, "metadata_pending", 0) if queue_snapshot else 0,
+        "processing": getattr(queue_snapshot, "metadata_processing", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "metadata_queue_depth", 0) if queue_snapshot else 0,
+        "oldest_pending_at": getattr(queue_snapshot, "oldest_metadata_pending_at", None) if queue_snapshot else None,
+        "oldest_processing_at": getattr(queue_snapshot, "oldest_metadata_processing_at", None) if queue_snapshot else None,
+    }
+
+    embedding_queue = {
+        "pending": getattr(queue_snapshot, "embedding_pending", 0) if queue_snapshot else 0,
+        "processing": getattr(queue_snapshot, "embedding_processing", 0) if queue_snapshot else 0,
+        "queue_depth": getattr(queue_snapshot, "embedding_queue_depth", 0) if queue_snapshot else 0,
+        "oldest_pending_at": getattr(queue_snapshot, "oldest_embedding_pending_at", None) if queue_snapshot else None,
+        "oldest_processing_at": getattr(queue_snapshot, "oldest_embedding_processing_at", None) if queue_snapshot else None,
+    }
+
     stuck_processing = {
         "preview": getattr(queue_snapshot, "stuck_preview", 0) if queue_snapshot else 0,
         "text": getattr(queue_snapshot, "stuck_text", 0) if queue_snapshot else 0,
