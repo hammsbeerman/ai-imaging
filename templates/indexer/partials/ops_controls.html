@@ -1,115 +1,163 @@
-<div class="col-12 col-lg-4 mb-4">
-  <h6 class="mb-3">Services</h6>
+<div class="row g-4 mt-1">
+  <div class="col-12 col-xl-5">
+    <h6 class="mb-3 d-flex justify-content-between align-items-center">
+      <span>Service Controls</span>
+      <small class="text-muted">
+        {% if queue_snapshot_updated_at %}
+          Queue snapshot updated {{ queue_snapshot_updated_at|timesince }} ago
+        {% else %}
+          No snapshot yet
+        {% endif %}
+      </small>
+    </h6>
 
-  <div class="d-flex flex-wrap gap-2 mb-2">
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="web" btn_class="btn-primary" label="Restart Web" confirm_text="Restart web service?" %}
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="beat" btn_class="btn-warning" label="Restart Beat" confirm_text="Restart celery beat?" %}
-  </div>
+    {% if queue_snapshot and queue_snapshot.queue_snapshot_error %}
+      <div class="alert alert-warning py-2 mb-3 small">
+        <strong>Queue snapshot warning:</strong>
+        {{ queue_snapshot.queue_snapshot_error }}
+      </div>
+    {% endif %}
 
-  <div class="d-flex flex-wrap gap-2 mb-2">
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="ops" btn_class="btn-outline-primary" label="Restart Ops" confirm_text="Restart ops worker?" %}
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="preview" btn_class="btn-outline-primary" label="Restart Preview" %}
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="text" btn_class="btn-outline-primary" label="Restart Text" %}
-  </div>
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="small text-muted fw-semibold mb-2">Core Services</div>
 
-  <div class="d-flex flex-wrap gap-2">
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="embedding" btn_class="btn-outline-secondary" label="Restart Embedding" %}
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="ocr" btn_class="btn-outline-secondary" label="Restart OCR" %}
-    {% include "indexer/partials/ops_form_button.html" with action="restart" target="mail" btn_class="btn-outline-secondary" label="Restart Mail" %}
-  </div>
-</div>
-<div class="col-12 col-lg-4">
-  <h6 class="mb-3 d-flex justify-content-between align-items-center">
-    <span>Clear Backlogs</span>
-    <small class="text-muted">
-      {% if queue_snapshot_updated_at %}
-        Updated {{ queue_snapshot_updated_at|timesince }} ago
-      {% else %}
-        No snapshot yet
-      {% endif %}
-    </small>
-  </h6>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="web" btn_class="btn-primary" label="Restart Web" confirm_text="Restart web service?" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="beat" btn_class="btn-warning" label="Restart Beat" confirm_text="Restart celery beat?" %}
+        </div>
 
-  {% if queue_snapshot and queue_snapshot.queue_snapshot_error %}
-    <div class="alert alert-warning py-2 mb-3 small">
-      <strong>Queue snapshot warning:</strong>
-      {{ queue_snapshot.queue_snapshot_error }}
+        <div class="small text-muted fw-semibold mb-2">Worker Services</div>
+
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="ops" btn_class="btn-outline-primary" label="Restart Ops" confirm_text="Restart ops worker?" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="scan" btn_class="btn-outline-primary" label="Restart Scan" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="preview" btn_class="btn-outline-primary" label="Restart Preview" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="text" btn_class="btn-outline-primary" label="Restart Text" %}
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="metadata" btn_class="btn-outline-secondary" label="Restart Metadata" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="embedding" btn_class="btn-outline-secondary" label="Restart Embedding" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="ocr" btn_class="btn-outline-secondary" label="Restart OCR" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="mail" btn_class="btn-outline-secondary" label="Restart Mail" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="control" btn_class="btn-outline-secondary" label="Restart Control" %}
+        </div>
+      </div>
     </div>
-  {% endif %}
 
-  <div class="small text-muted fw-semibold mb-2">Primary Pipeline</div>
-
-  <div class="mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Scan Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=scan_queue.pending_dirs|default:0 %}
+    <div class="alert alert-info py-2 small mb-0">
+      Queue counts shown here are from the latest snapshot, not live values. After a purge, the numbers may stay stale until the next queue snapshot rebuild runs.
     </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="scan" btn_class="btn-danger" label="Purge Scan Queue" confirm_text="Purge all queued scan jobs? This does not stop active jobs." %}
   </div>
 
-  <div class="mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Preview Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=preview_queue.pending|default:0 %}
-    </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="preview" btn_class="btn-danger" label="Purge Preview Queue" confirm_text="Purge all queued preview jobs? This does not stop active jobs." %}
-  </div>
+  <div class="col-12 col-xl-7">
+    <h6 class="mb-3 d-flex justify-content-between align-items-center">
+      <span>Clear Backlogs</span>
+      <small class="text-muted">
+        {% if queue_snapshot_updated_at %}
+          Updated {{ queue_snapshot_updated_at|timesince }} ago
+        {% else %}
+          No snapshot yet
+        {% endif %}
+      </small>
+    </h6>
 
-  <div class="mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Text Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=text_queue.pending|default:0 %}
-    </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="text" btn_class="btn-danger" label="Purge Text Queue" confirm_text="Purge all queued text jobs? This does not stop active jobs." %}
-  </div>
+    {% if queue_snapshot and queue_snapshot.queue_snapshot_error %}
+      <div class="alert alert-warning py-2 mb-3 small">
+        <strong>Queue snapshot warning:</strong>
+        {{ queue_snapshot.queue_snapshot_error }}
+      </div>
+    {% endif %}
 
-  <div class="mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Metadata Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=metadata_queue.pending|default:0 %}
-    </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="metadata" btn_class="btn-danger" label="Purge Metadata Queue" confirm_text="Purge all queued metadata jobs? This does not stop active jobs." %}
-  </div>
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-body">
+            <div class="small text-muted fw-semibold mb-2">Primary Pipeline</div>
 
-  <div class="mb-4">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Embedding Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=embedding_queue.pending|default:0 %}
-    </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="embedding" btn_class="btn-danger" label="Purge Embedding Queue" confirm_text="Purge all queued embedding jobs? This does not stop active jobs." %}
-  </div>
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Scan Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.scan_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="scan" btn_class="btn-danger" label="Purge Scan Queue" confirm_text="Purge all queued scan jobs? This does not stop active jobs." %}
+            </div>
 
-  <div class="small text-muted fw-semibold mb-2">Support Queues</div>
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Preview Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.preview_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="preview" btn_class="btn-danger" label="Purge Preview Queue" confirm_text="Purge all queued preview jobs? This does not stop active jobs." %}
+            </div>
 
-  <div class="mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Ops Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ops_queue_depth|default:0 %}
-    </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="ops" btn_class="btn-outline-danger" label="Purge Ops Queue" confirm_text="Purge all queued ops jobs? This does not stop active jobs." %}
-  </div>
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Text Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.text_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="text" btn_class="btn-danger" label="Purge Text Queue" confirm_text="Purge all queued text jobs? This does not stop active jobs." %}
+            </div>
 
-  <div class="mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">OCR Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ocr_queue_depth|default:0 %}
-    </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="ocr" btn_class="btn-outline-danger" label="Purge OCR Queue" confirm_text="Purge all queued OCR jobs? This does not stop active jobs." %}
-  </div>
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Metadata Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.metadata_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="metadata" btn_class="btn-danger" label="Purge Metadata Queue" confirm_text="Purge all queued metadata jobs? This does not stop active jobs." %}
+            </div>
 
-  <div class="mb-3">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Mail Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.mail_queue_depth|default:0 %}
-    </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="mail" btn_class="btn-outline-danger" label="Purge Mail Queue" confirm_text="Purge all queued mail jobs? This does not stop active jobs." %}
-  </div>
+            <div class="mb-0">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Embedding Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.embedding_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="embedding" btn_class="btn-danger" label="Purge Embedding Queue" confirm_text="Purge all queued embedding jobs? This does not stop active jobs." %}
+            </div>
+          </div>
+        </div>
+      </div>
 
-  <div class="mb-0">
-    <div class="d-flex align-items-center justify-content-between mb-2">
-      <div class="fw-semibold">Control Queue</div>
-      {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.control_queue_depth|default:0 %}
+      <div class="col-12 col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+          <div class="card-body">
+            <div class="small text-muted fw-semibold mb-2">Support Queues</div>
+
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Ops Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ops_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="ops" btn_class="btn-outline-danger" label="Purge Ops Queue" confirm_text="Purge all queued ops jobs? This does not stop active jobs." %}
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">OCR Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ocr_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="ocr" btn_class="btn-outline-danger" label="Purge OCR Queue" confirm_text="Purge all queued OCR jobs? This does not stop active jobs." %}
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Mail Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.mail_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="mail" btn_class="btn-outline-danger" label="Purge Mail Queue" confirm_text="Purge all queued mail jobs? This does not stop active jobs." %}
+            </div>
+
+            <div class="mb-0">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Control Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.control_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="control" btn_class="btn-outline-danger" label="Purge Control Queue" confirm_text="Purge all queued control jobs? This does not stop active jobs." %}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    {% include "indexer/partials/ops_form_button.html" with action="purge" target="control" btn_class="btn-outline-danger" label="Purge Control Queue" confirm_text="Purge all queued control jobs? This does not stop active jobs." %}
   </div>
 </div>
