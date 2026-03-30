@@ -1,0 +1,67 @@
+{% extends "indexer/base.html" %}
+
+{% block title %}{{ stage_label }} · AI Image Catalog{% endblock %}
+{% block page_title %}{{ stage_label }}{% endblock %}
+{% block page_meta %}Recent pipeline activity{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ stage_label }}</h1>
+      <div class="text-muted small">Latest completed and failed files for this stage</div>
+    </div>
+    <a href="{% url 'ui_home' %}" class="btn btn-outline-secondary btn-sm">Back to dashboard</a>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <strong>Last 5 completed</strong>
+          <span class="text-muted small">Newest first</span>
+        </div>
+        <div class="card-body">
+          {% if latest_done %}
+            <div class="list-group list-group-flush">
+              {% for item in latest_done %}
+                <a href="{% url 'ui_item' item.id %}" class="list-group-item list-group-item-action px-0">
+                  <div class="fw-semibold">{{ item.filename }}</div>
+                  <div class="small text-muted">{{ item.display_path }}</div>
+                  <div class="small text-muted">{{ item.updated_at }}</div>
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-muted">No completed files yet.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+          <strong>Last 5 failed</strong>
+          <span class="text-muted small">Newest first</span>
+        </div>
+        <div class="card-body">
+          {% if latest_failed %}
+            <div class="list-group list-group-flush">
+              {% for item in latest_failed %}
+                <a href="{% url 'ui_item' item.id %}" class="list-group-item list-group-item-action px-0">
+                  <div class="fw-semibold">{{ item.filename }}</div>
+                  <div class="small text-muted">{{ item.display_path }}</div>
+                  <div class="small text-muted">{{ item.updated_at }}</div>
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-muted">No failed files in this stage.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

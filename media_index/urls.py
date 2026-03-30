@@ -37,6 +37,7 @@ from indexer.ui_views import (
     ui_search,
     ui_similar,
     ui_status,
+    ui_pipeline_stage,
 )
 from indexer.views_documents import (
     document_approve,
@@ -84,6 +85,7 @@ urlpatterns = [
     path("ui/clusters/<str:cluster_id>/", ui_cluster_detail, name="ui_cluster_detail"),
     path("ui/health/folders/", ui_folder_health, name="ui_folder_health"),
     path("ui/health/folders/<int:folder_id>/<str:issue_code>/", ui_folder_issue_detail, name="ui_folder_issue_detail"),
+    path("ui/pipeline/<str:stage>/", ui_pipeline_stage, name="ui_pipeline_stage"),
 
     # Document + email UI
     path("ui/documents/", document_inbox, name="document_inbox"),

@@ -20,66 +20,155 @@
   </div>
 
   <div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Total files</div>
-        <div class="fs-3 fw-semibold">{{ total_files|default:0 }}</div>
+    <div class="col-md-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Total files</div>
+          <div class="fs-3 fw-semibold">{{ total_files|default:0 }}</div>
+          <div class="small text-muted mt-2">All discovered files in archive</div>
+        </div>
       </div>
     </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Preview complete</div>
-        <div class="fs-3 fw-semibold">{{ preview_complete|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Text complete</div>
-        <div class="fs-3 fw-semibold">{{ text_complete|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Metadata complete</div>
-        <div class="fs-3 fw-semibold">{{ metadata_complete|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Indexed</div>
-        <div class="fs-4 fw-semibold">{{ indexed_files|default:0 }}</div>
+    <div class="col-md-3">
+      <a href="{% url 'ui_pipeline_stage' 'search-ready' %}" class="text-decoration-none text-body">
+        <div class="card h-100 shadow-sm border-success">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="text-muted small">Search ready</div>
+                <div class="fs-3 fw-semibold">{{ indexed_files|default:0 }}</div>
+              </div>
+              <span class="badge text-bg-success">Done</span>
+            </div>
+            <div class="small text-muted mt-2">Fully processed and searchable</div>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Duplicate groups</div>
+          <div class="fs-3 fw-semibold">{{ duplicate_groups|default:0 }}</div>
+          <div class="small text-muted mt-2">Matched duplicate clusters</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <div class="text-muted small">Duplicate items</div>
+          <div class="fs-3 fw-semibold">{{ duplicate_items|default:0 }}</div>
+          <div class="small text-muted mt-2">Files inside duplicate groups</div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Duplicate groups</div>
-        <div class="fs-4 fw-semibold">{{ duplicate_groups|default:0 }}</div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong>Pipeline Stages</strong>
+      <span class="text-muted small">Click a stage to inspect recent files</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <a href="{% url 'ui_pipeline_stage' 'scan' %}" class="text-decoration-none text-body">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Scanned</div>
+              <div class="fs-4 fw-semibold">{{ total_files|default:0 }}</div>
+              <div class="small text-muted mt-2">Files discovered by scanner</div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-3">
+          <a href="{% url 'ui_pipeline_stage' 'preview' %}" class="text-decoration-none text-body">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Previewed</div>
+              <div class="fs-4 fw-semibold">{{ preview_complete|default:0 }}</div>
+              <div class="small text-muted mt-2">Preview generated successfully</div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-3">
+          <a href="{% url 'ui_pipeline_stage' 'text' %}" class="text-decoration-none text-body">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Text extracted</div>
+              <div class="fs-4 fw-semibold">{{ text_complete|default:0 }}</div>
+              <div class="small text-muted mt-2">OCR or native text captured</div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-3">
+          <a href="{% url 'ui_pipeline_stage' 'text-skipped' %}" class="text-decoration-none text-body">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Text not needed</div>
+              <div class="fs-4 fw-semibold">{{ text_skipped|default:0 }}</div>
+              <div class="small text-muted mt-2">Skipped because text was not expected</div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-3">
+          <a href="{% url 'ui_pipeline_stage' 'metadata' %}" class="text-decoration-none text-body">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Metadata complete</div>
+              <div class="fs-4 fw-semibold">{{ metadata_complete|default:0 }}</div>
+              <div class="small text-muted mt-2">Metadata extracted and normalized</div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-3">
+          <a href="{% url 'ui_pipeline_stage' 'embedding' %}" class="text-decoration-none text-body">
+            <div class="border rounded p-3 h-100">
+              <div class="text-muted small">Embedded</div>
+              <div class="fs-4 fw-semibold">{{ embedding_complete|default:0 }}</div>
+              <div class="small text-muted mt-2">Vector embeddings created</div>
+            </div>
+          </a>
+        </div>
+
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100 bg-light">
+            <div class="text-muted small">Preview queue</div>
+            <div class="fs-4 fw-semibold">{{ queue_summary.preview|default:0 }}</div>
+            <div class="small text-muted mt-2">Items waiting for preview</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100 bg-light">
+            <div class="text-muted small">Text queue</div>
+            <div class="fs-4 fw-semibold">{{ queue_summary.text|default:0 }}</div>
+            <div class="small text-muted mt-2">Items waiting for text/OCR</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100 bg-light">
+            <div class="text-muted small">Metadata queue</div>
+            <div class="fs-4 fw-semibold">{{ queue_summary.metadata|default:0 }}</div>
+            <div class="small text-muted mt-2">Items waiting for metadata</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100 bg-light">
+            <div class="text-muted small">Embedding queue</div>
+            <div class="fs-4 fw-semibold">{{ queue_summary.embedding|default:0 }}</div>
+            <div class="small text-muted mt-2">Items waiting for embeddings</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body">
-        <div class="text-muted small">Duplicate items</div>
-        <div class="fs-4 fw-semibold">{{ duplicate_items|default:0 }}</div>
-      </div>
-    </div>
-  </div>
-</div>
 
   <div class="card shadow-sm mb-4">
     <div class="card-header bg-white d-flex justify-content-between align-items-center">
@@ -128,7 +217,7 @@
               <div class="d-flex justify-content-between mb-1">
                 <strong>{{ row.label }}</strong>
                 <span class="text-muted small">
-                  done {{ row.done }} · ready {{ row.ready }} · processing {{ row.processing }} · failed {{ row.failed }}
+                  done {{ row.done }} · ready {{ row.ready }} · processing {{ row.processing }} · failed {{ row.failed }} · {{ row.other_label|default:"Other"|lower }} {{ row.other }}
                 </span>
               </div>
               <div class="progress" style="height: 18px;">
@@ -297,6 +386,7 @@
     </div>
   </div>
 </div>
+
 {% if messages %}
   <div class="mb-3">
     {% for message in messages %}
@@ -306,6 +396,7 @@
     {% endfor %}
   </div>
 {% endif %}
+
 {% if request.user.is_staff or request.user.is_superuser %}
   {% include "indexer/partials/ops_controls.html" %}
 {% endif %}

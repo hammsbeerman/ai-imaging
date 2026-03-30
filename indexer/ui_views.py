@@ -338,7 +338,6 @@ def ui_collections(request):
 
 @login_required
 def ui_home(request):
-
     stats = _latest_for_scope(ArchiveStats, scope="global") or _zero_archive_stats()
     queue_snapshot = _latest_for_scope(QueueHealthSnapshot, scope="global")
 
@@ -492,30 +491,6 @@ def ui_home(request):
         "oldest_processing_at": getattr(queue_snapshot, "oldest_embedding_processing_at", None) if queue_snapshot else None,
     }
 
-    text_queue = {
-        "pending": getattr(queue_snapshot, "text_pending", 0) if queue_snapshot else 0,
-        "processing": getattr(queue_snapshot, "text_processing", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "text_queue_depth", 0) if queue_snapshot else 0,
-        "oldest_pending_at": getattr(queue_snapshot, "oldest_text_pending_at", None) if queue_snapshot else None,
-        "oldest_processing_at": getattr(queue_snapshot, "oldest_text_processing_at", None) if queue_snapshot else None,
-    }
-
-    metadata_queue = {
-        "pending": getattr(queue_snapshot, "metadata_pending", 0) if queue_snapshot else 0,
-        "processing": getattr(queue_snapshot, "metadata_processing", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "metadata_queue_depth", 0) if queue_snapshot else 0,
-        "oldest_pending_at": getattr(queue_snapshot, "oldest_metadata_pending_at", None) if queue_snapshot else None,
-        "oldest_processing_at": getattr(queue_snapshot, "oldest_metadata_processing_at", None) if queue_snapshot else None,
-    }
-
-    embedding_queue = {
-        "pending": getattr(queue_snapshot, "embedding_pending", 0) if queue_snapshot else 0,
-        "processing": getattr(queue_snapshot, "embedding_processing", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "embedding_queue_depth", 0) if queue_snapshot else 0,
-        "oldest_pending_at": getattr(queue_snapshot, "oldest_embedding_pending_at", None) if queue_snapshot else None,
-        "oldest_processing_at": getattr(queue_snapshot, "oldest_embedding_processing_at", None) if queue_snapshot else None,
-    }
-
     stuck_processing = {
         "preview": getattr(queue_snapshot, "stuck_preview", 0) if queue_snapshot else 0,
         "text": getattr(queue_snapshot, "stuck_text", 0) if queue_snapshot else 0,
@@ -640,7 +615,9 @@ def ui_home(request):
         "doc_stats": doc_stats,
         "preview_complete": stats.preview_ok or 0,
         "text_complete": stats.text_ok or 0,
+        "text_skipped": stats.text_skipped or 0,
         "metadata_complete": stats.metadata_ok or 0,
+        "embedding_complete": stats.embedding_ok or 0,
         "queue_snapshot": queue_snapshot,
     }
 
@@ -1839,3 +1816,105 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect("landing")
+
+
+PIPELINE_STAGE_CONFIG = {
+    "scan": {
+        "label": "Scanned",
+        "done_q": Q(),
+        "failed_q": Q(),
+        "empty_done_means_all": True,
+    },
+    "preview": {
+        "label": "Previewed",
+        "done_q": Q(preview_status="OK"),
+        "failed_q": Q(preview_status="FAILED"),
+    },
+    "text": {
+        "label": "Text extracted",
+        "done_q": Q(text_status="OK"),
+        "failed_q": Q(text_status="FAILED"),
+    },
+    "text-skipped": {
+        "label": "Text not needed",
+        "done_q": Q(text_status__in=["SKIPPED", "UNSUPPORTED"]),
+        "failed_q": Q(text_status="FAILED"),
+    },
+    "metadata": {
+        "label": "Metadata complete",
+        "done_q": Q(metadata_status="OK"),
+        "failed_q": Q(metadata_status="FAILED"),
+    },
+    "embedding": {
+        "label": "Embedded",
+        "done_q": Q(embedding_status="OK"),
+        "failed_q": Q(embedding_status="FAILED"),
+    },
+    "search-ready": {
+        "label": "Search ready",
+        "done_q": (
+            Q(preview_status__in=["OK", "UNSUPPORTED"]) &
+            Q(metadata_status="OK") &
+            Q(text_status__in=["OK", "SKIPPED", "UNSUPPORTED"]) &
+            Q(embedding_status="OK")
+        ),
+        "failed_q": (
+            Q(preview_status="FAILED") |
+            Q(text_status="FAILED") |
+            Q(metadata_status="FAILED") |
+            Q(embedding_status="FAILED")
+        ),
+    },
+}
+
+
+def _item_path(item):
+    return getattr(item, "relative_path", None) or getattr(item, "path", None) or ""
+
+
+@login_required
+def ui_pipeline_stage(request, stage):
+    stage = (stage or "").strip().lower()
+    config = PIPELINE_STAGE_CONFIG.get(stage)
+
+    if not config:
+        return render(
+            request,
+            "indexer/pipeline_stage.html",
+            {
+                "stage": stage,
+                "stage_label": stage.replace("-", " ").title(),
+                "latest_done": [],
+                "latest_failed": [],
+            },
+            status=404,
+        )
+
+    base_qs = Image.objects.all().order_by("-updated_at")
+
+    done_q = config["done_q"]
+    failed_q = config["failed_q"]
+
+    if config.get("empty_done_means_all") and not done_q.children:
+        latest_done = list(base_qs[:5])
+        latest_failed = []
+    else:
+        latest_done = list(base_qs.filter(done_q)[:5])
+        latest_failed = list(base_qs.filter(failed_q)[:5])
+
+    for item in latest_done:
+        item.display_path = _item_path(item)
+
+    for item in latest_failed:
+        item.display_path = _item_path(item)
+
+    return render(
+        request,
+        "indexer/pipeline_stage.html",
+        {
+            "stage": stage,
+            "stage_label": config["label"],
+            "latest_done": latest_done,
+            "latest_failed": latest_failed,
+        },
+    )
