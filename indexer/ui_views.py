@@ -377,6 +377,42 @@ def ui_home(request):
         "skipped": stats.embedding_skipped or 0,
     }
 
+    text_accounted_for = (
+        text_counts["ok"]
+        + text_counts["pending_ready"]
+        + text_counts["processing"]
+        + text_counts["failed"]
+        + text_counts["skipped"]
+    )
+    text_unclassified = max(total_files - text_accounted_for, 0)
+
+    preview_accounted_for = (
+        preview_counts["ok"]
+        + preview_counts["pending_ready"]
+        + preview_counts["processing"]
+        + preview_counts["failed"]
+        + preview_counts["unsupported"]
+    )
+    preview_unclassified = max(total_files - preview_accounted_for, 0)
+
+    metadata_accounted_for = (
+        metadata_counts["ok"]
+        + metadata_counts["pending_ready"]
+        + metadata_counts["processing"]
+        + metadata_counts["failed"]
+        + metadata_counts["skipped"]
+    )
+    metadata_unclassified = max(total_files - metadata_accounted_for, 0)
+
+    embedding_accounted_for = (
+        embedding_counts["ok"]
+        + embedding_counts["pending_ready"]
+        + embedding_counts["processing"]
+        + embedding_counts["failed"]
+        + embedding_counts["skipped"]
+    )
+    embedding_unclassified = max(total_files - embedding_accounted_for, 0)
+
     text_quality = {
         "native_pdf": stats.text_native_pdf or 0,
         "ocr_image": stats.text_ocr_image or 0,
@@ -613,11 +649,19 @@ def ui_home(request):
         "queue_snapshot_updated_at": queue_snapshot_updated_at,
         "recent_previews": recent_previews,
         "doc_stats": doc_stats,
-        "preview_complete": stats.preview_ok or 0,
-        "text_complete": stats.text_ok or 0,
-        "text_skipped": stats.text_skipped or 0,
-        "metadata_complete": stats.metadata_ok or 0,
-        "embedding_complete": stats.embedding_ok or 0,
+        "preview_complete": preview_counts["ok"],
+        "preview_failed": preview_counts["failed"],
+        "preview_unclassified": preview_unclassified,
+        "text_complete": text_counts["ok"],
+        "text_skipped": text_counts["skipped"],
+        "text_failed": text_counts["failed"],
+        "text_unclassified": text_unclassified,
+        "metadata_complete": metadata_counts["ok"],
+        "metadata_failed": metadata_counts["failed"],
+        "metadata_unclassified": metadata_unclassified,
+        "embedding_complete": embedding_counts["ok"],
+        "embedding_failed": embedding_counts["failed"],
+        "embedding_unclassified": embedding_unclassified,
         "queue_snapshot": queue_snapshot,
     }
 
@@ -1818,37 +1862,116 @@ def logout_view(request):
     return redirect("landing")
 
 
+from django.contrib.auth.decorators import login_required
+from django.db.models import Q
+from django.shortcuts import render
+
+from indexer.models import Image
+
+
 PIPELINE_STAGE_CONFIG = {
     "scan": {
         "label": "Scanned",
         "done_q": Q(),
         "failed_q": Q(),
         "empty_done_means_all": True,
+        "primary_panel_title": "Last 5 scanned",
+        "empty_primary_text": "No scanned files yet.",
     },
     "preview": {
         "label": "Previewed",
         "done_q": Q(preview_status="OK"),
         "failed_q": Q(preview_status="FAILED"),
+        "primary_panel_title": "Last 5 previewed",
+        "empty_primary_text": "No previewed files yet.",
+    },
+    "preview-failed": {
+        "label": "Preview failed",
+        "done_q": Q(preview_status="FAILED"),
+        "failed_q": Q(preview_status="FAILED"),
+        "primary_panel_title": "Last 5 failed",
+        "empty_primary_text": "No failed preview files.",
+        "show_failed_panel": False,
+    },
+    "preview-unclassified": {
+        "label": "Preview not yet classified",
+        "done_q": Q(preview_status__isnull=True) | Q(preview_status=""),
+        "failed_q": Q(preview_status="FAILED"),
+        "primary_panel_title": "Last 5 not yet classified",
+        "empty_primary_text": "No unclassified preview files.",
     },
     "text": {
         "label": "Text extracted",
         "done_q": Q(text_status="OK"),
         "failed_q": Q(text_status="FAILED"),
+        "primary_panel_title": "Last 5 text extracted",
+        "empty_primary_text": "No text-extracted files yet.",
     },
     "text-skipped": {
         "label": "Text not needed",
         "done_q": Q(text_status__in=["SKIPPED", "UNSUPPORTED"]),
         "failed_q": Q(text_status="FAILED"),
+        "primary_panel_title": "Last 5 skipped / not needed",
+        "empty_primary_text": "No skipped text files.",
+    },
+    "text-failed": {
+        "label": "Text failed",
+        "done_q": Q(text_status="FAILED"),
+        "failed_q": Q(text_status="FAILED"),
+        "primary_panel_title": "Last 5 failed",
+        "empty_primary_text": "No failed text files.",
+        "show_failed_panel": False,
+    },
+    "text-unclassified": {
+        "label": "Text not yet evaluated",
+        "done_q": Q(text_status__isnull=True) | Q(text_status=""),
+        "failed_q": Q(text_status="FAILED"),
+        "primary_panel_title": "Last 5 not yet classified",
+        "empty_primary_text": "No unclassified text files.",
     },
     "metadata": {
         "label": "Metadata complete",
         "done_q": Q(metadata_status="OK"),
         "failed_q": Q(metadata_status="FAILED"),
+        "primary_panel_title": "Last 5 metadata complete",
+        "empty_primary_text": "No metadata-complete files yet.",
+    },
+    "metadata-failed": {
+        "label": "Metadata failed",
+        "done_q": Q(metadata_status="FAILED"),
+        "failed_q": Q(metadata_status="FAILED"),
+        "primary_panel_title": "Last 5 failed",
+        "empty_primary_text": "No failed metadata files.",
+        "show_failed_panel": False,
+    },
+    "metadata-unclassified": {
+        "label": "Metadata not yet classified",
+        "done_q": Q(metadata_status__isnull=True) | Q(metadata_status=""),
+        "failed_q": Q(metadata_status="FAILED"),
+        "primary_panel_title": "Last 5 not yet classified",
+        "empty_primary_text": "No unclassified metadata files.",
     },
     "embedding": {
         "label": "Embedded",
         "done_q": Q(embedding_status="OK"),
         "failed_q": Q(embedding_status="FAILED"),
+        "primary_panel_title": "Last 5 embedded",
+        "empty_primary_text": "No embedded files yet.",
+    },
+    "embedding-failed": {
+        "label": "Embedding failed",
+        "done_q": Q(embedding_status="FAILED"),
+        "failed_q": Q(embedding_status="FAILED"),
+        "primary_panel_title": "Last 5 failed",
+        "empty_primary_text": "No failed embedding files.",
+        "show_failed_panel": False,
+    },
+    "embedding-unclassified": {
+        "label": "Embedding not yet classified",
+        "done_q": Q(embedding_status__isnull=True) | Q(embedding_status=""),
+        "failed_q": Q(embedding_status="FAILED"),
+        "primary_panel_title": "Last 5 not yet classified",
+        "empty_primary_text": "No unclassified embedding files.",
     },
     "search-ready": {
         "label": "Search ready",
@@ -1864,6 +1987,8 @@ PIPELINE_STAGE_CONFIG = {
             Q(metadata_status="FAILED") |
             Q(embedding_status="FAILED")
         ),
+        "primary_panel_title": "Last 5 search ready",
+        "empty_primary_text": "No search-ready files yet.",
     },
 }
 
@@ -1886,11 +2011,14 @@ def ui_pipeline_stage(request, stage):
                 "stage_label": stage.replace("-", " ").title(),
                 "latest_done": [],
                 "latest_failed": [],
+                "primary_panel_title": "Last 5 matching files",
+                "empty_primary_text": "No matching files yet.",
+                "show_failed_panel": False,
             },
             status=404,
         )
 
-    base_qs = Image.objects.all().order_by("-updated_at")
+    base_qs = Image.objects.all().order_by("-updated_at", "-id")
 
     done_q = config["done_q"]
     failed_q = config["failed_q"]
@@ -1900,7 +2028,10 @@ def ui_pipeline_stage(request, stage):
         latest_failed = []
     else:
         latest_done = list(base_qs.filter(done_q)[:5])
-        latest_failed = list(base_qs.filter(failed_q)[:5])
+        if config.get("show_failed_panel", True):
+            latest_failed = list(base_qs.filter(failed_q)[:5])
+        else:
+            latest_failed = []
 
     for item in latest_done:
         item.display_path = _item_path(item)
@@ -1916,5 +2047,8 @@ def ui_pipeline_stage(request, stage):
             "stage_label": config["label"],
             "latest_done": latest_done,
             "latest_failed": latest_failed,
+            "primary_panel_title": config.get("primary_panel_title", "Last 5 matching files"),
+            "empty_primary_text": config.get("empty_primary_text", "No matching files yet."),
+            "show_failed_panel": config.get("show_failed_panel", True),
         },
     )
