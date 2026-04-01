@@ -13,6 +13,9 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from urllib.parse import quote
 
+from datetime import timedelta
+
+
 from indexer.models import (
     Folder,
     Image,
@@ -25,6 +28,7 @@ from indexer.models import (
     ArchiveStats,
     FolderHealthSnapshot,
     QueueHealthSnapshot,
+    TaskRunMetric,
 )
 from indexer.open_links import build_smb_folder, build_unc_folder, folder_rel
 from indexer.tasks_preview import process_preview_task
@@ -95,6 +99,13 @@ def _allowed_root_ids(user) -> set[int]:
     return set(
         UserAccessRoot.objects.filter(user_id=user.id)
         .values_list("root_id", flat=True)
+    )
+
+def _unclassified_q(field, pending_value):
+    return (
+        Q(**{f"{field}__isnull": True}) |
+        Q(**{field: ""}) |
+        Q(**{field: pending_value})
     )
 
 
@@ -222,10 +233,14 @@ def _folder_health_counts(folder_ids: list[int]) -> dict[int, dict[str, int]]:
         Image.objects.filter(folder_id__in=folder_ids)
         .values("folder_id")
         .annotate(
-            preview_failed_count=Count("id", filter=Q(preview_status="failed")),
+            preview_failed_count=Count("id", filter=Q(preview_status=PreviewStatus.FAILED)),
             missing_preview_count=Count(
                 "id",
-                filter=Q(preview_status__in=["pending", "failed", "unsupported"])
+                filter=Q(preview_status__in=[
+                    PreviewStatus.PENDING,
+                    PreviewStatus.FAILED,
+                    PreviewStatus.UNSUPPORTED,
+                ])
             ),
             duplicate_count=Count("id", filter=Q(duplicate_group__gt="")),
         )
@@ -336,6 +351,305 @@ def ui_collections(request):
     )
 
 
+def _safe_snapshot_value(snapshot, attr, default=0):
+    if not snapshot:
+        return default
+    value = getattr(snapshot, attr, default)
+    return default if value is None else value
+
+
+def _queue_info(snapshot, prefix):
+    return {
+        "pending": _safe_snapshot_value(snapshot, f"{prefix}_pending", 0),
+        "processing": _safe_snapshot_value(snapshot, f"{prefix}_processing", 0),
+        "queue_depth": _safe_snapshot_value(snapshot, f"{prefix}_queue_depth", 0),
+        "oldest_pending_at": _safe_snapshot_value(snapshot, f"oldest_{prefix}_pending_at", None),
+        "oldest_processing_at": _safe_snapshot_value(snapshot, f"oldest_{prefix}_processing_at", None),
+    }
+
+
+def _support_queue_info(snapshot, prefix):
+    return {
+        "queue_depth": _safe_snapshot_value(snapshot, f"{prefix}_queue_depth", 0),
+    }
+
+
+def _recent_metric_counts(task_names, minutes=15):
+    if not task_names:
+        return {}
+    since = timezone.now() - timedelta(minutes=minutes)
+    rows = (
+        TaskRunMetric.objects
+        .filter(
+            task_name__in=task_names,
+            status="ok",
+            finished_at__gte=since,
+        )
+        .values("task_name")
+        .order_by()
+        .annotate(count=models.Count("id"))
+    )
+    counts = {row["task_name"]: row["count"] for row in rows}
+    for task_name in task_names:
+        counts.setdefault(task_name, 0)
+    return counts
+
+
+def _build_task_runtime_rows():
+    metric_task_names = [
+        "rebuild_archive_stats_task",
+        "rebuild_queue_health_snapshot_task",
+        "rebuild_folder_health_snapshot_task",
+        "queue_missing_previews_task",
+        "queue_missing_text_task",
+        "queue_missing_embeddings_task",
+        "queue_missing_metadata_task",
+        "reset_stale_processing_task",
+        "reset_stale_preview_processing_task",
+    ]
+    recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
+
+    latest_metric_by_task = {}
+    for row in recent_metrics:
+        latest_metric_by_task.setdefault(row.task_name, row)
+
+    runtime_labels = {
+        "rebuild_archive_stats_task": "Archive stats rebuild",
+        "rebuild_queue_health_snapshot_task": "Queue snapshot rebuild",
+        "rebuild_folder_health_snapshot_task": "Folder health rebuild",
+        "queue_missing_previews_task": "Preview queue batch",
+        "queue_missing_text_task": "Text queue batch",
+        "queue_missing_embeddings_task": "Embedding queue batch",
+        "queue_missing_metadata_task": "Metadata queue batch",
+        "reset_stale_processing_task": "Recovery reset",
+        "reset_stale_preview_processing_task": "Preview stale reset",
+    }
+
+    recent_success_counts = _recent_metric_counts(list(runtime_labels.keys()), minutes=15)
+
+    task_runtime_rows = []
+    for task_name, label in runtime_labels.items():
+        metric = latest_metric_by_task.get(task_name)
+        finished_at = getattr(metric, "finished_at", None) if metric else None
+        task_runtime_rows.append(
+            {
+                "label": label,
+                "task_name": task_name,
+                "status": getattr(metric, "status", "—") if metric else "—",
+                "duration_ms": getattr(metric, "duration_ms", None) if metric else None,
+                "finished_at": finished_at,
+                "age_minutes": _age_minutes(finished_at),
+                "recent_successes_15m": recent_success_counts.get(task_name, 0),
+            }
+        )
+
+    return task_runtime_rows
+
+
+def _runtime_row_map(task_runtime_rows):
+    return {row["task_name"]: row for row in task_runtime_rows}
+
+
+def _badge_for_health(health):
+    return {
+        "running": "success",
+        "backlogged": "warning",
+        "blocked": "warning",
+        "stalled": "danger",
+        "failing": "danger",
+        "idle": "secondary",
+        "draining": "info",
+        "unknown": "dark",
+    }.get(health, "secondary")
+
+
+def _human_queue_age(ts):
+    minutes = _age_minutes(ts)
+    if minutes is None:
+        return None
+    if minutes < 60:
+        return f"{minutes} min"
+    hours = round(minutes / 60, 1)
+    return f"{hours} hr"
+
+
+def _build_stage_health(
+    *,
+    label,
+    stage_slug,
+    queue_info,
+    runtime_row=None,
+    stuck_count=0,
+    stale_minutes=15,
+    backlog_warning=5000,
+):
+    queue_depth = queue_info.get("queue_depth", 0) or 0
+    pending = queue_info.get("pending", 0) or 0
+    processing = queue_info.get("processing", 0) or 0
+    oldest_pending_at = queue_info.get("oldest_pending_at")
+    oldest_processing_at = queue_info.get("oldest_processing_at")
+
+    last_status = (runtime_row or {}).get("status", "—")
+    last_finished_at = (runtime_row or {}).get("finished_at")
+    last_age_minutes = _age_minutes(last_finished_at)
+    recent_successes_15m = (runtime_row or {}).get("recent_successes_15m", 0)
+
+    health = "idle"
+    reason = "No backlog"
+
+    if stuck_count > 0:
+        health = "stalled"
+        reason = f"{stuck_count} stuck items"
+    elif queue_depth <= 0:
+        if processing > 0:
+            health = "draining"
+            reason = "No queued items, but items are still processing"
+        elif last_status in {"failed", "error"} and last_age_minutes is not None and last_age_minutes <= stale_minutes:
+            health = "failing"
+            reason = "Latest batch failed recently"
+        else:
+            health = "idle"
+            reason = "No queued items"
+    else:
+        if last_status in {"failed", "error"} and last_age_minutes is not None and last_age_minutes <= stale_minutes:
+            health = "failing"
+            reason = "Latest batch failed with backlog present"
+        elif last_finished_at is None:
+            health = "unknown"
+            reason = "Backlog present but no recent batch metric"
+        elif last_age_minutes is not None and last_age_minutes > stale_minutes:
+            health = "stalled"
+            reason = f"No recent successful batch for {last_age_minutes} min"
+        elif recent_successes_15m == 0 and processing == 0:
+            health = "blocked"
+            reason = "Backlog present but no recent batch activity"
+        elif queue_depth >= backlog_warning:
+            health = "backlogged"
+            reason = "Stage is moving but backlog is high"
+        else:
+            health = "running"
+            reason = "Queue is being serviced"
+
+    return {
+        "label": label,
+        "stage_slug": stage_slug,
+        "health": health,
+        "badge": _badge_for_health(health),
+        "reason": reason,
+        "queue_depth": queue_depth,
+        "pending": pending,
+        "processing": processing,
+        "stuck": stuck_count,
+        "last_status": last_status,
+        "last_finished_at": last_finished_at,
+        "last_age_minutes": last_age_minutes,
+        "recent_successes_15m": recent_successes_15m,
+        "oldest_pending_at": oldest_pending_at,
+        "oldest_processing_at": oldest_processing_at,
+        "oldest_pending_age": _human_queue_age(oldest_pending_at),
+        "oldest_processing_age": _human_queue_age(oldest_processing_at),
+    }
+
+
+def _build_dashboard_alerts(
+    *,
+    system_signals,
+    pipeline_health,
+    ocr_queue_depth=0,
+    queue_summary=None,
+    stuck_processing=None,
+):
+    alerts = []
+
+    if system_signals.get("queue_stale_minutes") is not None and system_signals["queue_stale_minutes"] > 10:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "Queue snapshot is stale",
+                "body": f"Latest queue snapshot is {system_signals['queue_stale_minutes']} minutes old.",
+            }
+        )
+
+    if system_signals.get("stats_stale_minutes") is not None and system_signals["stats_stale_minutes"] > 15:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "Archive stats are stale",
+                "body": f"Latest archive stats snapshot is {system_signals['stats_stale_minutes']} minutes old.",
+            }
+        )
+
+    if not system_signals.get("mount_ok", False):
+        alerts.append(
+            {
+                "level": "danger",
+                "title": "Preview mount problem",
+                "body": "Preview storage is not healthy.",
+            }
+        )
+
+    text_health = pipeline_health.get("text", {})
+    embedding_health = pipeline_health.get("embedding", {})
+    preview_health = pipeline_health.get("preview", {})
+    metadata_health = pipeline_health.get("metadata", {})
+
+    if text_health.get("health") in {"stalled", "failing", "unknown", "blocked"}:
+        alerts.append(
+            {
+                "level": "danger" if text_health.get("health") in {"stalled", "failing"} else "warning",
+                "title": "Text stage needs attention",
+                "body": text_health.get("reason", "Text stage is not healthy."),
+            }
+        )
+
+    if ocr_queue_depth > 1000 and (queue_summary or {}).get("text", 0) == 0:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "OCR backlog is disconnected from text queue reporting",
+                "body": f"OCR queue has {ocr_queue_depth} items while text queue shows 0.",
+            }
+        )
+
+    if embedding_health.get("queue_depth", 0) > 20000:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "Embedding backlog is high",
+                "body": f"Embedding queue currently has {embedding_health['queue_depth']} items.",
+            }
+        )
+
+    if preview_health.get("stuck", 0) > 0:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "Preview has stuck work",
+                "body": f"{preview_health['stuck']} preview items appear stuck.",
+            }
+        )
+
+    if metadata_health.get("stuck", 0) > 0:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "Metadata has stuck work",
+                "body": f"{metadata_health['stuck']} metadata items appear stuck.",
+            }
+        )
+
+    if (stuck_processing or {}).get("embedding", 0) > 0:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "Embedding has stuck work",
+                "body": f"{stuck_processing['embedding']} embedding items appear stuck.",
+            }
+        )
+
+    return alerts
+
+
 @login_required
 def ui_home(request):
     stats = _latest_for_scope(ArchiveStats, scope="global") or _zero_archive_stats()
@@ -377,41 +691,25 @@ def ui_home(request):
         "skipped": stats.embedding_skipped or 0,
     }
 
-    text_accounted_for = (
-        text_counts["ok"]
-        + text_counts["pending_ready"]
-        + text_counts["processing"]
-        + text_counts["failed"]
-        + text_counts["skipped"]
-    )
-    text_unclassified = max(total_files - text_accounted_for, 0)
+    
+    text_unclassified = Image.objects.filter(
+        _unclassified_q("text_status", ProcessingStatus.PENDING)
+    ).count()
 
-    preview_accounted_for = (
-        preview_counts["ok"]
-        + preview_counts["pending_ready"]
-        + preview_counts["processing"]
-        + preview_counts["failed"]
-        + preview_counts["unsupported"]
-    )
-    preview_unclassified = max(total_files - preview_accounted_for, 0)
+    
+    preview_unclassified = Image.objects.filter(
+        _unclassified_q("preview_status", PreviewStatus.PENDING)
+    ).count()
 
-    metadata_accounted_for = (
-        metadata_counts["ok"]
-        + metadata_counts["pending_ready"]
-        + metadata_counts["processing"]
-        + metadata_counts["failed"]
-        + metadata_counts["skipped"]
-    )
-    metadata_unclassified = max(total_files - metadata_accounted_for, 0)
+    
+    metadata_unclassified = Image.objects.filter(
+        _unclassified_q("metadata_status", ProcessingStatus.PENDING)
+    ).count()
 
-    embedding_accounted_for = (
-        embedding_counts["ok"]
-        + embedding_counts["pending_ready"]
-        + embedding_counts["processing"]
-        + embedding_counts["failed"]
-        + embedding_counts["skipped"]
-    )
-    embedding_unclassified = max(total_files - embedding_accounted_for, 0)
+    
+    embedding_unclassified = Image.objects.filter(
+        _unclassified_q("embedding_status", ProcessingStatus.PENDING)
+    ).count()
 
     text_quality = {
         "native_pdf": stats.text_native_pdf or 0,
@@ -481,100 +779,82 @@ def ui_home(request):
     ]
 
     queue_summary = {
-        "scan": getattr(queue_snapshot, "scan_queue_depth", 0) if queue_snapshot else 0,
-        "preview": getattr(queue_snapshot, "preview_queue_depth", 0) if queue_snapshot else 0,
-        "text": getattr(queue_snapshot, "text_queue_depth", 0) if queue_snapshot else 0,
-        "metadata": getattr(queue_snapshot, "metadata_queue_depth", 0) if queue_snapshot else 0,
-        "embedding": getattr(queue_snapshot, "embedding_queue_depth", 0) if queue_snapshot else 0,
+        "scan": _safe_snapshot_value(queue_snapshot, "scan_queue_depth", 0),
+        "preview": _safe_snapshot_value(queue_snapshot, "preview_queue_depth", 0),
+        "text": _safe_snapshot_value(queue_snapshot, "text_queue_depth", 0),
+        "metadata": _safe_snapshot_value(queue_snapshot, "metadata_queue_depth", 0),
+        "embedding": _safe_snapshot_value(queue_snapshot, "embedding_queue_depth", 0),
+        "ocr": _safe_snapshot_value(queue_snapshot, "ocr_queue_depth", 0),
+        "ops": _safe_snapshot_value(queue_snapshot, "ops_queue_depth", 0),
+        "mail": _safe_snapshot_value(queue_snapshot, "mail_queue_depth", 0),
+        "control": _safe_snapshot_value(queue_snapshot, "control_queue_depth", 0),
     }
 
     scan_queue = {
-        "pending_dirs": getattr(queue_snapshot, "scan_pending_dirs", 0) if queue_snapshot else 0,
-        "retrying_dirs": getattr(queue_snapshot, "scan_retrying_dirs", 0) if queue_snapshot else 0,
-        "done_dirs": getattr(queue_snapshot, "scan_done_dirs", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "scan_queue_depth", 0) if queue_snapshot else 0,
+        "pending_dirs": _safe_snapshot_value(queue_snapshot, "scan_pending_dirs", 0),
+        "retrying_dirs": _safe_snapshot_value(queue_snapshot, "scan_retrying_dirs", 0),
+        "done_dirs": _safe_snapshot_value(queue_snapshot, "scan_done_dirs", 0),
+        "queue_depth": _safe_snapshot_value(queue_snapshot, "scan_queue_depth", 0),
     }
 
-    preview_queue = {
-        "pending": getattr(queue_snapshot, "preview_pending", 0) if queue_snapshot else 0,
-        "processing": getattr(queue_snapshot, "preview_processing", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "preview_queue_depth", 0) if queue_snapshot else 0,
-        "oldest_pending_at": getattr(queue_snapshot, "oldest_preview_pending_at", None) if queue_snapshot else None,
-        "oldest_processing_at": getattr(queue_snapshot, "oldest_preview_processing_at", None) if queue_snapshot else None,
-    }
+    preview_queue = _queue_info(queue_snapshot, "preview")
+    text_queue = _queue_info(queue_snapshot, "text")
+    metadata_queue = _queue_info(queue_snapshot, "metadata")
+    embedding_queue = _queue_info(queue_snapshot, "embedding")
 
-    text_queue = {
-        "pending": getattr(queue_snapshot, "text_pending", 0) if queue_snapshot else 0,
-        "processing": getattr(queue_snapshot, "text_processing", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "text_queue_depth", 0) if queue_snapshot else 0,
-        "oldest_pending_at": getattr(queue_snapshot, "oldest_text_pending_at", None) if queue_snapshot else None,
-        "oldest_processing_at": getattr(queue_snapshot, "oldest_text_processing_at", None) if queue_snapshot else None,
-    }
-
-    metadata_queue = {
-        "pending": getattr(queue_snapshot, "metadata_pending", 0) if queue_snapshot else 0,
-        "processing": getattr(queue_snapshot, "metadata_processing", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "metadata_queue_depth", 0) if queue_snapshot else 0,
-        "oldest_pending_at": getattr(queue_snapshot, "oldest_metadata_pending_at", None) if queue_snapshot else None,
-        "oldest_processing_at": getattr(queue_snapshot, "oldest_metadata_processing_at", None) if queue_snapshot else None,
-    }
-
-    embedding_queue = {
-        "pending": getattr(queue_snapshot, "embedding_pending", 0) if queue_snapshot else 0,
-        "processing": getattr(queue_snapshot, "embedding_processing", 0) if queue_snapshot else 0,
-        "queue_depth": getattr(queue_snapshot, "embedding_queue_depth", 0) if queue_snapshot else 0,
-        "oldest_pending_at": getattr(queue_snapshot, "oldest_embedding_pending_at", None) if queue_snapshot else None,
-        "oldest_processing_at": getattr(queue_snapshot, "oldest_embedding_processing_at", None) if queue_snapshot else None,
-    }
+    ocr_queue = _support_queue_info(queue_snapshot, "ocr")
+    ops_queue = _support_queue_info(queue_snapshot, "ops")
+    mail_queue = _support_queue_info(queue_snapshot, "mail")
+    control_queue = _support_queue_info(queue_snapshot, "control")
 
     stuck_processing = {
-        "preview": getattr(queue_snapshot, "stuck_preview", 0) if queue_snapshot else 0,
-        "text": getattr(queue_snapshot, "stuck_text", 0) if queue_snapshot else 0,
-        "metadata": getattr(queue_snapshot, "stuck_metadata", 0) if queue_snapshot else 0,
-        "embedding": getattr(queue_snapshot, "stuck_embedding", 0) if queue_snapshot else 0,
+        "preview": _safe_snapshot_value(queue_snapshot, "stuck_preview", 0),
+        "text": _safe_snapshot_value(queue_snapshot, "stuck_text", 0),
+        "metadata": _safe_snapshot_value(queue_snapshot, "stuck_metadata", 0),
+        "embedding": _safe_snapshot_value(queue_snapshot, "stuck_embedding", 0),
     }
 
-    metric_task_names = [
-        "rebuild_archive_stats_task",
-        "rebuild_queue_health_snapshot_task",
-        "rebuild_folder_health_snapshot_task",
-        "queue_missing_previews_task",
-        "queue_missing_text_task",
-        "queue_missing_embeddings_task",
-        "queue_missing_metadata_task",
-        "reset_stale_processing_task",
-        "reset_stale_preview_processing_task",
-    ]
-    recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
+    task_runtime_rows = _build_task_runtime_rows()
+    runtime_map = _runtime_row_map(task_runtime_rows)
 
-    latest_metric_by_task = {}
-    for row in recent_metrics:
-        latest_metric_by_task.setdefault(row.task_name, row)
-
-    runtime_labels = {
-        "rebuild_archive_stats_task": "Archive stats rebuild",
-        "rebuild_queue_health_snapshot_task": "Queue snapshot rebuild",
-        "rebuild_folder_health_snapshot_task": "Folder health rebuild",
-        "queue_missing_previews_task": "Preview queue batch",
-        "queue_missing_text_task": "Text queue batch",
-        "queue_missing_embeddings_task": "Embedding queue batch",
-        "queue_missing_metadata_task": "Metadata queue batch",
-        "reset_stale_processing_task": "Recovery reset",
-        "reset_stale_preview_processing_task": "Preview stale reset",
+    pipeline_health = {
+        "preview": _build_stage_health(
+            label="Preview",
+            stage_slug="preview",
+            queue_info=preview_queue,
+            runtime_row=runtime_map.get("queue_missing_previews_task"),
+            stuck_count=stuck_processing["preview"],
+            stale_minutes=15,
+            backlog_warning=5000,
+        ),
+        "text": _build_stage_health(
+            label="Text",
+            stage_slug="text",
+            queue_info=text_queue,
+            runtime_row=runtime_map.get("queue_missing_text_task"),
+            stuck_count=stuck_processing["text"],
+            stale_minutes=15,
+            backlog_warning=5000,
+        ),
+        "metadata": _build_stage_health(
+            label="Metadata",
+            stage_slug="metadata",
+            queue_info=metadata_queue,
+            runtime_row=runtime_map.get("queue_missing_metadata_task"),
+            stuck_count=stuck_processing["metadata"],
+            stale_minutes=15,
+            backlog_warning=5000,
+        ),
+        "embedding": _build_stage_health(
+            label="Embedding",
+            stage_slug="embedding",
+            queue_info=embedding_queue,
+            runtime_row=runtime_map.get("queue_missing_embeddings_task"),
+            stuck_count=stuck_processing["embedding"],
+            stale_minutes=15,
+            backlog_warning=20000,
+        ),
     }
-
-    task_runtime_rows = []
-    for task_name, label in runtime_labels.items():
-        metric = latest_metric_by_task.get(task_name)
-        task_runtime_rows.append(
-            {
-                "label": label,
-                "task_name": task_name,
-                "status": getattr(metric, "status", "—") if metric else "—",
-                "duration_ms": getattr(metric, "duration_ms", None) if metric else None,
-                "finished_at": getattr(metric, "finished_at", None) if metric else None,
-            }
-        )
 
     recent_preview_qs = (
         Image.objects
@@ -623,6 +903,14 @@ def ui_home(request):
         "queue_stale_minutes": _age_minutes(queue_snapshot_updated_at),
     }
 
+    alerts = _build_dashboard_alerts(
+        system_signals=system_signals,
+        pipeline_health=pipeline_health,
+        ocr_queue_depth=queue_summary["ocr"],
+        queue_summary=queue_summary,
+        stuck_processing=stuck_processing,
+    )
+
     context = {
         "total_files": total_files,
         "indexed_files": indexed,
@@ -641,6 +929,10 @@ def ui_home(request):
         "text_queue": text_queue,
         "metadata_queue": metadata_queue,
         "embedding_queue": embedding_queue,
+        "ocr_queue": ocr_queue,
+        "ops_queue": ops_queue,
+        "mail_queue": mail_queue,
+        "control_queue": control_queue,
         "stuck_processing": stuck_processing,
         "top_errors": [],
         "task_runtime_rows": task_runtime_rows,
@@ -663,6 +955,8 @@ def ui_home(request):
         "embedding_failed": embedding_counts["failed"],
         "embedding_unclassified": embedding_unclassified,
         "queue_snapshot": queue_snapshot,
+        "pipeline_health": pipeline_health,
+        "alerts": alerts,
     }
 
     return render(request, "indexer/ui_home.html", context)
@@ -935,13 +1229,13 @@ def ui_status(request):
     skipped_images = Image.objects.filter(skip_index=True).count()
 
     preview_ready_qs = Image.objects.filter(
-        models.Q(preview_status="ok") |
+        models.Q(preview_status=PreviewStatus.OK) |
         models.Q(preview_path__isnull=False, preview_path__gt="") |
         models.Q(thumb_path__isnull=False, thumb_path__gt="")
     )
     preview_ready = preview_ready_qs.distinct().count()
-    pending_previews = Image.objects.filter(preview_status="pending").count()
-    failed_previews = Image.objects.filter(preview_status="failed").count()
+    pending_previews = Image.objects.filter(preview_status=PreviewStatus.PENDING).count()
+    failed_previews = Image.objects.filter(preview_status=PreviewStatus.FAILED).count()
     extracted_text_count = Image.objects.exclude(extracted_text__isnull=True).exclude(extracted_text="").count()
 
     scan_total = ScanDir.objects.count()
@@ -1786,6 +2080,7 @@ def ui_folder_issue_detail(request, folder_id, issue):
 
 
 @require_POST
+@login_required
 def ui_requeue_stage_bulk(request, stage):
     qs = Image.objects.all()
 
@@ -1815,6 +2110,8 @@ def ui_requeue_stage_bulk(request, stage):
         messages.success(request, f"Requeued embeddings for {updated} items.")
     else:
         messages.error(request, f"Unknown stage: {stage}")
+
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", "/ui/"))
 
 
 
@@ -1862,13 +2159,6 @@ def logout_view(request):
     return redirect("landing")
 
 
-from django.contrib.auth.decorators import login_required
-from django.db.models import Q
-from django.shortcuts import render
-
-from indexer.models import Image
-
-
 PIPELINE_STAGE_CONFIG = {
     "scan": {
         "label": "Scanned",
@@ -1880,112 +2170,121 @@ PIPELINE_STAGE_CONFIG = {
     },
     "preview": {
         "label": "Previewed",
-        "done_q": Q(preview_status="OK"),
-        "failed_q": Q(preview_status="FAILED"),
+        "done_q": Q(preview_status=PreviewStatus.OK),
+        "failed_q": Q(preview_status=PreviewStatus.FAILED),
         "primary_panel_title": "Last 5 previewed",
         "empty_primary_text": "No previewed files yet.",
     },
     "preview-failed": {
         "label": "Preview failed",
-        "done_q": Q(preview_status="FAILED"),
-        "failed_q": Q(preview_status="FAILED"),
+        "done_q": Q(preview_status=PreviewStatus.FAILED),
+        "failed_q": Q(preview_status=PreviewStatus.FAILED),
         "primary_panel_title": "Last 5 failed",
         "empty_primary_text": "No failed preview files.",
         "show_failed_panel": False,
     },
     "preview-unclassified": {
         "label": "Preview not yet classified",
-        "done_q": Q(preview_status__isnull=True) | Q(preview_status=""),
-        "failed_q": Q(preview_status="FAILED"),
+        "done_q": _unclassified_q("preview_status", PreviewStatus.PENDING),
+        "failed_q": Q(preview_status=PreviewStatus.FAILED),
         "primary_panel_title": "Last 5 not yet classified",
         "empty_primary_text": "No unclassified preview files.",
     },
     "text": {
         "label": "Text extracted",
-        "done_q": Q(text_status="OK"),
-        "failed_q": Q(text_status="FAILED"),
+        "done_q": Q(text_status=ProcessingStatus.OK),
+        "failed_q": Q(text_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 text extracted",
         "empty_primary_text": "No text-extracted files yet.",
     },
     "text-skipped": {
         "label": "Text not needed",
-        "done_q": Q(text_status__in=["SKIPPED", "UNSUPPORTED"]),
-        "failed_q": Q(text_status="FAILED"),
+        "done_q": Q(
+            text_status__in=[
+                ProcessingStatus.SKIPPED,
+                ProcessingStatus.UNSUPPORTED,
+            ]
+        ),
+        "failed_q": Q(text_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 skipped / not needed",
         "empty_primary_text": "No skipped text files.",
     },
     "text-failed": {
         "label": "Text failed",
-        "done_q": Q(text_status="FAILED"),
-        "failed_q": Q(text_status="FAILED"),
+        "done_q": Q(text_status=ProcessingStatus.FAILED),
+        "failed_q": Q(text_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 failed",
         "empty_primary_text": "No failed text files.",
         "show_failed_panel": False,
     },
     "text-unclassified": {
         "label": "Text not yet evaluated",
-        "done_q": Q(text_status__isnull=True) | Q(text_status=""),
-        "failed_q": Q(text_status="FAILED"),
+        "done_q": _unclassified_q("text_status", ProcessingStatus.PENDING),
+        "failed_q": Q(text_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 not yet classified",
         "empty_primary_text": "No unclassified text files.",
     },
     "metadata": {
         "label": "Metadata complete",
-        "done_q": Q(metadata_status="OK"),
-        "failed_q": Q(metadata_status="FAILED"),
+        "done_q": Q(metadata_status=ProcessingStatus.OK),
+        "failed_q": Q(metadata_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 metadata complete",
         "empty_primary_text": "No metadata-complete files yet.",
     },
     "metadata-failed": {
         "label": "Metadata failed",
-        "done_q": Q(metadata_status="FAILED"),
-        "failed_q": Q(metadata_status="FAILED"),
+        "done_q": Q(metadata_status=ProcessingStatus.FAILED),
+        "failed_q": Q(metadata_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 failed",
         "empty_primary_text": "No failed metadata files.",
         "show_failed_panel": False,
     },
     "metadata-unclassified": {
         "label": "Metadata not yet classified",
-        "done_q": Q(metadata_status__isnull=True) | Q(metadata_status=""),
-        "failed_q": Q(metadata_status="FAILED"),
+        "done_q": _unclassified_q("metadata_status", ProcessingStatus.PENDING),
+        "failed_q": Q(metadata_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 not yet classified",
         "empty_primary_text": "No unclassified metadata files.",
     },
     "embedding": {
         "label": "Embedded",
-        "done_q": Q(embedding_status="OK"),
-        "failed_q": Q(embedding_status="FAILED"),
+        "done_q": Q(embedding_status=ProcessingStatus.OK),
+        "failed_q": Q(embedding_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 embedded",
         "empty_primary_text": "No embedded files yet.",
     },
     "embedding-failed": {
         "label": "Embedding failed",
-        "done_q": Q(embedding_status="FAILED"),
-        "failed_q": Q(embedding_status="FAILED"),
+        "done_q": Q(embedding_status=ProcessingStatus.FAILED),
+        "failed_q": Q(embedding_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 failed",
         "empty_primary_text": "No failed embedding files.",
         "show_failed_panel": False,
     },
     "embedding-unclassified": {
         "label": "Embedding not yet classified",
-        "done_q": Q(embedding_status__isnull=True) | Q(embedding_status=""),
-        "failed_q": Q(embedding_status="FAILED"),
+        "done_q": _unclassified_q("embedding_status", ProcessingStatus.PENDING),
+        "failed_q": Q(embedding_status=ProcessingStatus.FAILED),
         "primary_panel_title": "Last 5 not yet classified",
         "empty_primary_text": "No unclassified embedding files.",
     },
     "search-ready": {
         "label": "Search ready",
         "done_q": (
-            Q(preview_status__in=["OK", "UNSUPPORTED"]) &
-            Q(metadata_status="OK") &
-            Q(text_status__in=["OK", "SKIPPED", "UNSUPPORTED"]) &
-            Q(embedding_status="OK")
+            Q(preview_status__in=[PreviewStatus.OK, PreviewStatus.UNSUPPORTED])
+            & Q(metadata_status=ProcessingStatus.OK)
+            & Q(text_status__in=[
+                ProcessingStatus.OK,
+                ProcessingStatus.SKIPPED,
+                ProcessingStatus.UNSUPPORTED,
+            ])
+            & Q(embedding_status=ProcessingStatus.OK)
         ),
         "failed_q": (
-            Q(preview_status="FAILED") |
-            Q(text_status="FAILED") |
-            Q(metadata_status="FAILED") |
-            Q(embedding_status="FAILED")
+            Q(preview_status=PreviewStatus.FAILED)
+            | Q(text_status=ProcessingStatus.FAILED)
+            | Q(metadata_status=ProcessingStatus.FAILED)
+            | Q(embedding_status=ProcessingStatus.FAILED)
         ),
         "primary_panel_title": "Last 5 search ready",
         "empty_primary_text": "No search-ready files yet.",

@@ -5,7 +5,6 @@
 {% block page_meta %}Archive overview and pipeline health{% endblock %}
 
 {% block content %}
-
 <div class="container-fluid py-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -18,6 +17,27 @@
       </div>
     </div>
   </div>
+
+  {% if messages %}
+    <div class="mb-3">
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} py-2 mb-2">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if alerts %}
+    <div class="mb-4">
+      {% for alert in alerts %}
+        <div class="alert alert-{{ alert.level }} mb-2">
+          <strong>{{ alert.title }}</strong><br>
+          {{ alert.body }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
 
   <div class="row g-3 mb-4">
     <div class="col-md-3">
@@ -64,6 +84,54 @@
           <div class="fs-3 fw-semibold">{{ duplicate_items|default:0 }}</div>
           <div class="small text-muted mt-2">Files inside duplicate groups</div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong>Pipeline Health</strong>
+      <span class="text-muted small">Current stage behavior</span>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        {% for key, stage in pipeline_health.items %}
+          <div class="col-md-6 col-xl-3">
+            <a href="{% url 'ui_pipeline_stage' stage.stage_slug %}" class="text-decoration-none text-body">
+              <div class="border rounded p-3 h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <div class="text-muted small">{{ stage.label }}</div>
+                  <span class="badge text-bg-{{ stage.badge }}">{{ stage.health|title }}</span>
+                </div>
+                <div class="fs-4 fw-semibold">{{ stage.queue_depth|default:0 }}</div>
+                <div class="small text-muted mb-2">Queued items</div>
+
+                <div class="small">
+                  <div><strong>Reason:</strong> {{ stage.reason }}</div>
+                  <div><strong>Processing:</strong> {{ stage.processing|default:0 }}</div>
+                  <div><strong>Stuck:</strong> {{ stage.stuck|default:0 }}</div>
+                  <div><strong>Recent ok runs (15m):</strong> {{ stage.recent_successes_15m|default:0 }}</div>
+                  <div>
+                    <strong>Last batch:</strong>
+                    {% if stage.last_finished_at %}
+                      {{ stage.last_finished_at }}{% if stage.last_age_minutes is not None %} · {{ stage.last_age_minutes }} min ago{% endif %}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </div>
+                  <div>
+                    <strong>Oldest queued:</strong>
+                    {% if stage.oldest_pending_at %}
+                      {{ stage.oldest_pending_at }}{% if stage.oldest_pending_age %} · {{ stage.oldest_pending_age }} old{% endif %}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </a>
+          </div>
+        {% endfor %}
       </div>
     </div>
   </div>
@@ -147,7 +215,23 @@
           <div class="border rounded p-3 h-100 bg-light">
             <div class="text-muted small">Text queue</div>
             <div class="fs-4 fw-semibold">{{ queue_summary.text|default:0 }}</div>
-            <div class="small text-muted mt-2">Items waiting for text/OCR</div>
+            <div class="small text-muted mt-2">Items waiting for text dispatch</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100 bg-light">
+            <div class="text-muted small">OCR queue</div>
+            <div class="fs-4 fw-semibold">{{ queue_summary.ocr|default:0 }}</div>
+            <div class="small text-muted mt-2">Items waiting for OCR work</div>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="border rounded p-3 h-100 bg-light">
+            <div class="text-muted small">Embedding queue</div>
+            <div class="fs-4 fw-semibold">{{ queue_summary.embedding|default:0 }}</div>
+            <div class="small text-muted mt-2">Items waiting for embeddings</div>
           </div>
         </div>
       </div>
@@ -233,26 +317,6 @@
               <div class="small text-muted mt-2">Files with no embedding-stage classification yet</div>
             </div>
           </a>
-        </div>
-      </div>
-
-      <hr class="my-4">
-
-      <div class="row g-3">
-        <div class="col-md-3">
-          <div class="border rounded p-3 h-100 bg-light">
-            <div class="text-muted small">Metadata queue</div>
-            <div class="fs-4 fw-semibold">{{ queue_summary.metadata|default:0 }}</div>
-            <div class="small text-muted mt-2">Items waiting for metadata</div>
-          </div>
-        </div>
-
-        <div class="col-md-3">
-          <div class="border rounded p-3 h-100 bg-light">
-            <div class="text-muted small">Embedding queue</div>
-            <div class="fs-4 fw-semibold">{{ queue_summary.embedding|default:0 }}</div>
-            <div class="small text-muted mt-2">Items waiting for embeddings</div>
-          </div>
         </div>
       </div>
     </div>
@@ -349,6 +413,16 @@
             <div class="fw-semibold">{{ system_signals.stats_stale_minutes|default:"—" }} min</div>
           </div>
 
+          <div class="mb-3">
+            <div class="small text-muted">Support queues</div>
+            <div class="small">
+              OCR {{ queue_summary.ocr|default:0 }}<br>
+              Ops {{ queue_summary.ops|default:0 }}<br>
+              Mail {{ queue_summary.mail|default:0 }}<br>
+              Control {{ queue_summary.control|default:0 }}
+            </div>
+          </div>
+
           <div>
             <div class="small text-muted">Stuck jobs</div>
             <div class="small">
@@ -408,8 +482,12 @@
             <div class="col-6 mb-2">Scan: <strong>{{ queue_summary.scan|default:0 }}</strong></div>
             <div class="col-6 mb-2">Preview: <strong>{{ queue_summary.preview|default:0 }}</strong></div>
             <div class="col-6 mb-2">Text: <strong>{{ queue_summary.text|default:0 }}</strong></div>
+            <div class="col-6 mb-2">OCR: <strong>{{ queue_summary.ocr|default:0 }}</strong></div>
             <div class="col-6 mb-2">Metadata: <strong>{{ queue_summary.metadata|default:0 }}</strong></div>
             <div class="col-6 mb-2">Embedding: <strong>{{ queue_summary.embedding|default:0 }}</strong></div>
+            <div class="col-6 mb-2">Ops: <strong>{{ queue_summary.ops|default:0 }}</strong></div>
+            <div class="col-6 mb-2">Mail: <strong>{{ queue_summary.mail|default:0 }}</strong></div>
+            <div class="col-6 mb-2">Control: <strong>{{ queue_summary.control|default:0 }}</strong></div>
           </div>
         </div>
       </div>
@@ -451,13 +529,25 @@
               <th>Status</th>
               <th>Duration</th>
               <th>Finished</th>
+              <th>Age</th>
+              <th>Recent ok runs (15m)</th>
             </tr>
           </thead>
           <tbody>
             {% for row in task_runtime_rows %}
               <tr>
                 <td>{{ row.label }}</td>
-                <td>{{ row.status }}</td>
+                <td>
+                  {% if row.status == "ok" %}
+                    <span class="badge text-bg-success">ok</span>
+                  {% elif row.status == "failed" or row.status == "error" %}
+                    <span class="badge text-bg-danger">{{ row.status }}</span>
+                  {% elif row.status == "—" %}
+                    <span class="text-muted">—</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">{{ row.status }}</span>
+                  {% endif %}
+                </td>
                 <td>
                   {% if row.duration_ms is not None %}
                     {{ row.duration_ms }} ms
@@ -466,6 +556,14 @@
                   {% endif %}
                 </td>
                 <td>{{ row.finished_at|default:"—" }}</td>
+                <td>
+                  {% if row.age_minutes is not None %}
+                    {{ row.age_minutes }} min
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>{{ row.recent_successes_15m|default:0 }}</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -475,18 +573,7 @@
   </div>
 </div>
 
-{% if messages %}
-  <div class="mb-3">
-    {% for message in messages %}
-      <div class="alert alert-{{ message.tags }} py-2">
-        {{ message }}
-      </div>
-    {% endfor %}
-  </div>
-{% endif %}
-
 {% if request.user.is_staff or request.user.is_superuser %}
   {% include "indexer/partials/ops_controls.html" %}
 {% endif %}
-
 {% endblock %}
