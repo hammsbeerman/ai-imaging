@@ -140,22 +140,30 @@ def rebuild_queue_health_snapshot_task(timeout_minutes: int = 45):
     ).aggregate(v=Min("embedding_run_at"))["v"]
     embedding["indexed"] = Image.objects.filter(indexed=True).count()
 
+    # stage-specific stale cutoffs (must match recovery task)
+    preview_cutoff = started_at - timedelta(minutes=45)
+    metadata_cutoff = started_at - timedelta(minutes=45)
+    embedding_cutoff = started_at - timedelta(minutes=120)
+
     stuck = {
         "stuck_preview": Image.objects.filter(
             preview_status=PreviewStatus.PROCESSING,
-            preview_created_at__lt=cutoff,
+            updated_at__lt=preview_cutoff,
         ).count(),
+
         "stuck_text": Image.objects.filter(
             text_status=ProcessingStatus.PROCESSING,
-            text_run_at__lt=cutoff,
+            updated_at__lt=preview_cutoff,  # text follows preview timing
         ).count(),
+
         "stuck_metadata": Image.objects.filter(
             metadata_status=ProcessingStatus.PROCESSING,
-            metadata_run_at__lt=cutoff,
+            updated_at__lt=metadata_cutoff,
         ).count(),
+
         "stuck_embedding": Image.objects.filter(
             embedding_status=ProcessingStatus.PROCESSING,
-            embedding_run_at__lt=cutoff,
+            updated_at__lt=embedding_cutoff,
         ).count(),
     }
 

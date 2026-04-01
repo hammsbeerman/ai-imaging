@@ -691,22 +691,18 @@ def ui_home(request):
         "skipped": stats.embedding_skipped or 0,
     }
 
-    
-    text_unclassified = Image.objects.filter(
-        _unclassified_q("text_status", ProcessingStatus.PENDING)
-    ).count()
-
-    
     preview_unclassified = Image.objects.filter(
         _unclassified_q("preview_status", PreviewStatus.PENDING)
     ).count()
 
-    
+    text_unclassified = Image.objects.filter(
+        _unclassified_q("text_status", ProcessingStatus.PENDING)
+    ).count()
+
     metadata_unclassified = Image.objects.filter(
         _unclassified_q("metadata_status", ProcessingStatus.PENDING)
     ).count()
 
-    
     embedding_unclassified = Image.objects.filter(
         _unclassified_q("embedding_status", ProcessingStatus.PENDING)
     ).count()
@@ -790,6 +786,8 @@ def ui_home(request):
         "control": _safe_snapshot_value(queue_snapshot, "control_queue_depth", 0),
     }
 
+    queue_summary["text_total"] = queue_summary["text"] + queue_summary["ocr"]
+
     scan_queue = {
         "pending_dirs": _safe_snapshot_value(queue_snapshot, "scan_pending_dirs", 0),
         "retrying_dirs": _safe_snapshot_value(queue_snapshot, "scan_retrying_dirs", 0),
@@ -806,6 +804,17 @@ def ui_home(request):
     ops_queue = _support_queue_info(queue_snapshot, "ops")
     mail_queue = _support_queue_info(queue_snapshot, "mail")
     control_queue = _support_queue_info(queue_snapshot, "control")
+
+    text_backlog = {
+        "text_queue_depth": queue_summary["text"],
+        "ocr_queue_depth": queue_summary["ocr"],
+        "combined_queue_depth": queue_summary["text_total"],
+        "text_processing": text_counts["processing"],
+        "text_pending_ready": text_counts["pending_ready"],
+        "text_failed": text_counts["failed"],
+        "text_skipped": text_counts["skipped"],
+        "note": "Combined text backlog includes both the primary text queue and OCR queue.",
+    }
 
     stuck_processing = {
         "preview": _safe_snapshot_value(queue_snapshot, "stuck_preview", 0),
@@ -830,7 +839,13 @@ def ui_home(request):
         "text": _build_stage_health(
             label="Text",
             stage_slug="text",
-            queue_info=text_queue,
+            queue_info={
+                **text_queue,
+                "queue_depth": queue_summary["text_total"],
+                "primary_queue_depth": queue_summary["text"],
+                "ocr_queue_depth": queue_summary["ocr"],
+                "combined_queue_depth": queue_summary["text_total"],
+            },
             runtime_row=runtime_map.get("queue_missing_text_task"),
             stuck_count=stuck_processing["text"],
             stale_minutes=15,
@@ -933,6 +948,7 @@ def ui_home(request):
         "ops_queue": ops_queue,
         "mail_queue": mail_queue,
         "control_queue": control_queue,
+        "text_backlog": text_backlog,
         "stuck_processing": stuck_processing,
         "top_errors": [],
         "task_runtime_rows": task_runtime_rows,
