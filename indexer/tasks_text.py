@@ -26,9 +26,12 @@ except Exception:
 
 
 IMAGE_TEXT_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
-QUEUE_PICK_LIMIT = 500
-WORKER_BATCH_SIZE = 25
-TEXT_PROCESSING_CAP = 500
+
+# Keep text work moving, but do not let it claim so much work that rows sit in
+# PROCESSING forever while the worker catches up.
+QUEUE_PICK_LIMIT = 200
+WORKER_BATCH_SIZE = 10
+TEXT_PROCESSING_CAP = 200
 
 
 def _chunked(seq, size):
@@ -392,7 +395,11 @@ def queue_missing_text_task(batch_size: int = QUEUE_PICK_LIMIT, chunk_size: int 
         submitted = 0
         claimed_ids = [str(x) for x in claimed_ids[:claim_count]]
         for batch_ids in _chunked(claimed_ids, chunk_size):
-            process_text_batch_task.delay(batch_ids)
+            process_text_batch_task.apply_async(
+                args=[batch_ids],
+                queue="text",
+                routing_key="text",
+            )
             submitted += 1
 
         details = {

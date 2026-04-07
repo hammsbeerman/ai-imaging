@@ -1,10 +1,133 @@
 <div class="row g-4 mt-1">
   <div class="col-12 col-xl-5">
     <h6 class="mb-3 d-flex justify-content-between align-items-center">
-      <span>Service Controls</span>
+      <span>Recovery + Rebuild Controls</span>
       <small class="text-muted">
         {% if queue_snapshot_updated_at %}
-          Queue snapshot updated {{ queue_snapshot_updated_at|timesince }} ago
+          Snapshot {{ queue_snapshot_updated_at|timesince }} ago
+        {% else %}
+          No snapshot yet
+        {% endif %}
+      </small>
+    </h6>
+
+    {% if queue_snapshot and queue_snapshot.queue_snapshot_error %}
+      <div class="alert alert-warning py-2 mb-3 small">
+        <strong>Queue snapshot warning:</strong>
+        {{ queue_snapshot.queue_snapshot_error }}
+      </div>
+    {% endif %}
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="small text-muted fw-semibold mb-2">Rebuilds</div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          {% include "indexer/partials/ops_form_button.html" with action="rebuild_snapshot" target="ops" btn_class="btn-secondary" label="Refresh Queue Snapshot" %}
+          {% include "indexer/partials/ops_form_button.html" with action="rebuild_archive_stats" target="ops" btn_class="btn-outline-secondary" label="Refresh Archive Stats" %}
+          {% include "indexer/partials/ops_form_button.html" with action="rebuild_folder_health" target="ops" btn_class="btn-outline-secondary" label="Refresh Folder Health" %}
+        </div>
+
+        <div class="small text-muted fw-semibold mb-2">Stage Recovery</div>
+        <div class="d-flex flex-wrap gap-2">
+          {% include "indexer/partials/ops_form_button.html" with action="reset_stale_preview" target="preview" btn_class="btn-warning" label="Reset Preview Stuck" confirm_text="Reset stale preview rows back to pending?" %}
+          {% include "indexer/partials/ops_form_button.html" with action="reset_stale_metadata" target="metadata" btn_class="btn-warning" label="Reset Metadata Stuck" confirm_text="Reset stale metadata rows back to pending?" %}
+          {% include "indexer/partials/ops_form_button.html" with action="reset_stale_embedding" target="embedding" btn_class="btn-warning" label="Reset Embedding Stuck" confirm_text="Reset stale embedding rows back to pending?" %}
+          {% include "indexer/partials/ops_form_button.html" with action="reset_stale_all" target="pipeline" btn_class="btn-danger" label="Reset All Stale" confirm_text="Reset all stale preview, metadata, and embedding rows back to pending?" %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+      <div class="card-body">
+        <div class="small text-muted fw-semibold mb-2">Manual Queueing</div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          {% include "indexer/partials/ops_form_button.html" with action="queue_preview_work" target="preview" btn_class="btn-outline-primary" label="Queue Preview Work" %}
+          {% include "indexer/partials/ops_form_button.html" with action="queue_text_work" target="text" btn_class="btn-outline-primary" label="Queue Text Work" %}
+          {% include "indexer/partials/ops_form_button.html" with action="queue_metadata_work" target="metadata" btn_class="btn-outline-primary" label="Queue Metadata Work" %}
+          {% include "indexer/partials/ops_form_button.html" with action="queue_embedding_work" target="embedding" btn_class="btn-outline-primary" label="Queue Embedding Work" %}
+          {% include "indexer/partials/ops_form_button.html" with action="queue_document_sync" target="ocr" btn_class="btn-outline-primary" label="Queue Document Sync" %}
+        </div>
+
+        <div class="small text-muted">
+          Use these when a stage looks idle, recently restarted, or needs a manual nudge after clearing stale rows.
+        </div>
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <div class="small text-muted fw-semibold mb-2">Quick Diagnosis</div>
+
+        <div class="border rounded p-2 mb-2">
+          <div class="fw-semibold">Preview</div>
+          <div class="small text-muted">
+            Queue {{ queue_summary.preview|default:0 }} ·
+            Stuck {{ stuck_processing.preview|default:0 }} ·
+            Processing {{ queue_snapshot.preview_processing|default:0 }}
+          </div>
+          {% if stuck_processing.preview|default:0 > 0 %}
+            <div class="small text-warning mt-1">Preview has stale processing rows. Reset stuck rows, then restart preview worker if they reappear.</div>
+          {% else %}
+            <div class="small text-success mt-1">Preview currently looks stable.</div>
+          {% endif %}
+        </div>
+
+        <div class="border rounded p-2 mb-2">
+          <div class="fw-semibold">Text extraction</div>
+          <div class="small text-muted">
+            Queue {{ queue_summary.text|default:0 }} ·
+            OCR/document {{ queue_summary.ocr|default:0 }} ·
+            Stuck {{ stuck_processing.text|default:0 }} ·
+            Processing {{ queue_snapshot.text_processing|default:0 }}
+          </div>
+          {% if queue_summary.text|default:0 == 0 and queue_summary.ocr|default:0 > 0 %}
+            <div class="small text-warning mt-1">OCR/document support is backed up while extraction is quiet. Queue text work and confirm OCR + text workers are both active.</div>
+          {% elif stuck_processing.text|default:0 > 0 %}
+            <div class="small text-warning mt-1">Text rows are sitting in processing. Check text worker logs and confirm process_text_batch_task is landing on the text queue.</div>
+          {% else %}
+            <div class="small text-success mt-1">Text routing currently looks aligned.</div>
+          {% endif %}
+        </div>
+
+        <div class="border rounded p-2 mb-2">
+          <div class="fw-semibold">Metadata</div>
+          <div class="small text-muted">
+            Queue {{ queue_summary.metadata|default:0 }} ·
+            Stuck {{ stuck_processing.metadata|default:0 }} ·
+            Processing {{ queue_snapshot.metadata_processing|default:0 }}
+          </div>
+          {% if stuck_processing.metadata|default:0 > 0 %}
+            <div class="small text-warning mt-1">Metadata has stale processing rows. Reset stale metadata and verify metadata worker throughput.</div>
+          {% else %}
+            <div class="small text-success mt-1">Metadata currently looks stable.</div>
+          {% endif %}
+        </div>
+
+        <div class="border rounded p-2">
+          <div class="fw-semibold">Embedding</div>
+          <div class="small text-muted">
+            Queue {{ queue_summary.embedding|default:0 }} ·
+            Stuck {{ stuck_processing.embedding|default:0 }} ·
+            Processing {{ queue_snapshot.embedding_processing|default:0 }}
+          </div>
+          {% if queue_summary.embedding|default:0 > 20000 %}
+            <div class="small text-warning mt-1">Embedding backlog is high. Reset stale rows first, then consider scaling embedding worker throughput.</div>
+          {% elif stuck_processing.embedding|default:0 > 0 %}
+            <div class="small text-warning mt-1">Embedding has stale rows. Reset them, then verify embedding worker memory and concurrency.</div>
+          {% else %}
+            <div class="small text-success mt-1">Embedding currently looks stable.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-7">
+    <h6 class="mb-3 d-flex justify-content-between align-items-center">
+      <span>Service Controls + Queue Clear</span>
+      <small class="text-muted">
+        {% if queue_snapshot_updated_at %}
+          Updated {{ queue_snapshot_updated_at|timesince }} ago
         {% else %}
           No snapshot yet
         {% endif %}
@@ -21,21 +144,18 @@
     <div class="card shadow-sm border-0 mb-3">
       <div class="card-body">
         <div class="small text-muted fw-semibold mb-2">Core Services</div>
-
         <div class="d-flex flex-wrap gap-2 mb-3">
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="web" btn_class="btn-primary" label="Restart Web" confirm_text="Restart web service?" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="beat" btn_class="btn-warning" label="Restart Beat" confirm_text="Restart celery beat?" %}
         </div>
 
         <div class="small text-muted fw-semibold mb-2">Worker Services</div>
-
         <div class="d-flex flex-wrap gap-2 mb-2">
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="ops" btn_class="btn-outline-primary" label="Restart Ops" confirm_text="Restart ops worker?" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="scan" btn_class="btn-outline-primary" label="Restart Scan" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="preview" btn_class="btn-outline-primary" label="Restart Preview" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="text" btn_class="btn-outline-primary" label="Restart Text" %}
         </div>
-
         <div class="d-flex flex-wrap gap-2">
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="metadata" btn_class="btn-outline-secondary" label="Restart Metadata" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="embedding" btn_class="btn-outline-secondary" label="Restart Embedding" %}
@@ -45,30 +165,6 @@
         </div>
       </div>
     </div>
-
-    <div class="alert alert-info py-2 small mb-0">
-      Queue counts shown here are from the latest snapshot, not live values. After a purge, the numbers may stay stale until the next queue snapshot rebuild runs.
-    </div>
-  </div>
-
-  <div class="col-12 col-xl-7">
-    <h6 class="mb-3 d-flex justify-content-between align-items-center">
-      <span>Clear Backlogs</span>
-      <small class="text-muted">
-        {% if queue_snapshot_updated_at %}
-          Updated {{ queue_snapshot_updated_at|timesince }} ago
-        {% else %}
-          No snapshot yet
-        {% endif %}
-      </small>
-    </h6>
-
-    {% if queue_snapshot and queue_snapshot.queue_snapshot_error %}
-      <div class="alert alert-warning py-2 mb-3 small">
-        <strong>Queue snapshot warning:</strong>
-        {{ queue_snapshot.queue_snapshot_error }}
-      </div>
-    {% endif %}
 
     <div class="row g-3">
       <div class="col-12 col-md-6">
@@ -158,6 +254,10 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="alert alert-info py-2 small mt-3 mb-0">
+      Queue counts shown here are from the latest snapshot, not live values. Use “Refresh Queue Snapshot” after resets, purges, or manual queueing so the dashboard matches current state.
     </div>
   </div>
 </div>

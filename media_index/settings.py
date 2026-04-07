@@ -185,7 +185,7 @@ CELERY_BEAT_SCHEDULE = {
     "queue-text-every-60-sec": {
         "task": "indexer.tasks_text.queue_missing_text_task",
         "schedule": 60.0,
-        "args": (1000,),
+        "args": (200, 10),
         "options": {"queue": "ocr", "routing_key": "ocr"},
     },
     "queue-embeddings-every-60-sec": {
@@ -197,7 +197,7 @@ CELERY_BEAT_SCHEDULE = {
     "queue-metadata-every-120-sec": {
         "task": "indexer.tasks_metadata.queue_missing_metadata_task",
         "schedule": 120.0,
-        "args": (512, 32),
+        "args": (256, 16),
         "options": {"queue": "control", "routing_key": "control"},
     },
     "queue-dedupe-every-90-sec": {
@@ -211,24 +211,6 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 300.0,
         "args": (500,),
         "options": {"queue": "preview", "routing_key": "preview"},
-    },
-    "repair-missing-previews-every-30-min": {
-        "task": "indexer.tasks_preview.repair_missing_previews_task",
-        "schedule": 1800.0,
-        "args": (500,),
-        "options": {"queue": "preview", "routing_key": "preview"},
-    },
-    "reset-stuck-preview-every-10-min": {
-        "task": "indexer.tasks_recovery.reset_stale_preview_processing_task",
-        "schedule": 600.0,
-        "args": (45,),
-        "options": {"queue": "preview", "routing_key": "preview"},
-    },
-    "reset-stuck-processing-every-10-min": {
-        "task": "indexer.tasks_recovery.reset_stale_processing_task",
-        "schedule": 300.0,
-        "args": (45,),
-        "options": {"queue": "control", "routing_key": "control"},
     },
     "rebuild_archive_stats": {
         "task": "indexer.tasks_stats.rebuild_archive_stats_task",
@@ -266,43 +248,41 @@ CELERY_BEAT_SCHEDULE = {
             "embedding_minutes": 120,
             "batch_size": 500,
         },
-    }
+        "options": {"queue": "control", "routing_key": "control"},
+    },
 }
 
 CELERY_TASK_ROUTES = {
     "indexer.tasks.scan_task": {"queue": "scan"},
 
-
-
     "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "ops"},
     "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "ops"},
     "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "ops"},
-
 
     "indexer.tasks_documents.queue_missing_document_sync_task": {"queue": "ocr"},
     "indexer.tasks_documents.sync_document_from_image_task": {"queue": "ocr"},
     "indexer.tasks_documents.reprocess_document_task": {"queue": "ocr"},
     "indexer.tasks_text.queue_missing_text_task": {"queue": "ocr"},
-    
+
     "indexer.tasks_text.extract_text_task": {"queue": "text"},
-    
+    "indexer.tasks_text.process_text_batch_task": {"queue": "text"},
+
     "indexer.tasks_mail.fetch_imap_emails": {"queue": "mail"},
     "indexer.tasks_mail.relink_email_documents_task": {"queue": "mail"},
 
-    
-    
     "indexer.tasks_embedding.queue_missing_embeddings_task": {"queue": "control"},
     "indexer.tasks_metadata.queue_missing_metadata_task": {"queue": "control"},
     "indexer.tasks_dedupe.queue_missing_dedupe_task": {"queue": "control"},
-    "indexer.tasks_recovery.reset_stale_processing_task": {"queue": "control"},
+
+    "indexer.reset_stale_preview_task": {"queue": "control"},
+    "indexer.reset_stale_metadata_task": {"queue": "control"},
+    "indexer.reset_stale_embedding_task": {"queue": "control"},
+    "indexer.reset_stale_pipeline_processing_task": {"queue": "control"},
 
     "indexer.tasks_preview.queue_missing_previews_task": {"queue": "preview"},
     "indexer.tasks_preview.process_preview_task": {"queue": "preview"},
     "indexer.tasks_preview.process_preview_batch_task": {"queue": "preview"},
     "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
-    "indexer.tasks_recovery.reset_stale_preview_processing_task": {"queue": "preview"},
-
-    
 
     "indexer.tasks_embedding.embed_image_task": {"queue": "embedding"},
     "indexer.tasks_embedding.process_embedding_batch_task": {"queue": "embedding"},
@@ -311,9 +291,6 @@ CELERY_TASK_ROUTES = {
     "indexer.tasks_metadata.process_metadata_batch_task": {"queue": "metadata"},
     "indexer.tasks_dedupe.dedupe_image_task": {"queue": "metadata"},
     "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
-
-
-
 }
 
 CELERY_TASK_ANNOTATIONS = {
@@ -328,6 +305,10 @@ CELERY_TASK_ANNOTATIONS = {
     "indexer.tasks_text.extract_text_task": {
         "soft_time_limit": 300,
         "time_limit": 360,
+    },
+    "indexer.tasks_text.process_text_batch_task": {
+        "soft_time_limit": 900,
+        "time_limit": 1080,
     },
     "indexer.tasks_metadata.extract_metadata_task": {
         "soft_time_limit": 180,
