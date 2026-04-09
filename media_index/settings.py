@@ -186,7 +186,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "indexer.tasks_text.queue_missing_text_task",
         "schedule": 60.0,
         "args": (200, 10),
-        "options": {"queue": "ocr", "routing_key": "ocr"},
+        "options": {"queue": "ocr_dispatch", "routing_key": "ocr_dispatch"},
+    },
+    "queue-document-sync-every-90-sec": {
+        "task": "indexer.tasks_documents.queue_missing_document_sync_task",
+        "schedule": 90.0,
+        "args": (500, 50),
+        "options": {"queue": "document_sync", "routing_key": "document_sync"},
     },
     "queue-embeddings-every-60-sec": {
         "task": "indexer.tasks_embedding.queue_missing_embeddings_task",
@@ -228,12 +234,6 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 300.0,
         "options": {"queue": "ops", "routing_key": "ops"},
     },
-    "queue-document-sync-every-90-sec": {
-        "task": "indexer.tasks_documents.queue_missing_document_sync_task",
-        "schedule": 90.0,
-        "args": (500, 50),
-        "options": {"queue": "ocr", "routing_key": "ocr"},
-    },
     "fetch-imap-emails-every-5-min": {
         "task": "indexer.tasks_mail.fetch_imap_emails",
         "schedule": 300.0,
@@ -259,13 +259,17 @@ CELERY_TASK_ROUTES = {
     "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "ops"},
     "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "ops"},
 
-    "indexer.tasks_documents.queue_missing_document_sync_task": {"queue": "ocr"},
-    "indexer.tasks_documents.sync_document_from_image_task": {"queue": "ocr"},
-    "indexer.tasks_documents.reprocess_document_task": {"queue": "ocr"},
-    "indexer.tasks_text.queue_missing_text_task": {"queue": "ocr"},
+    # text orchestration
+    "indexer.tasks_text.queue_missing_text_task": {"queue": "ocr_dispatch"},
 
+    # actual text extraction
     "indexer.tasks_text.extract_text_task": {"queue": "text"},
     "indexer.tasks_text.process_text_batch_task": {"queue": "text"},
+
+    # document sync work
+    "indexer.tasks_documents.queue_missing_document_sync_task": {"queue": "document_sync"},
+    "indexer.tasks_documents.sync_document_from_image_task": {"queue": "document_sync"},
+    "indexer.tasks_documents.reprocess_document_task": {"queue": "document_sync"},
 
     "indexer.tasks_mail.fetch_imap_emails": {"queue": "mail"},
     "indexer.tasks_mail.relink_email_documents_task": {"queue": "mail"},
@@ -323,6 +327,7 @@ CELERY_TASK_ANNOTATIONS = {
         "time_limit": 360,
     },
 }
+
 
 INDEX_PREVIEW_ROOT = os.getenv("INDEX_PREVIEW_ROOT", "/mnt/ai-previews/development")
 INDEX_PREVIEW_MOUNT_CHECK = os.getenv("INDEX_PREVIEW_MOUNT_CHECK", "/mnt/ai-previews")
