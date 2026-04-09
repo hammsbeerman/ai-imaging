@@ -1,13 +1,17 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 REMOTE_HOST="ubuntu@192.168.0.66"
 
-echo "==> Restarting local beat..."
-sudo systemctl restart media-index-celery-beat
+restart_local() {
+    local svc="$1"
+    echo "==> Restarting local ${svc}..."
+    sudo systemctl restart "${svc}"
+}
 
-echo "==> Restarting local gunicorn..."
-sudo systemctl restart media-index-gunicorn
+echo "==> Restarting local services..."
+restart_local media-index-celery-beat
+restart_local media-index-gunicorn
 
 echo "==> Fast-restarting workers on ${REMOTE_HOST}..."
 ssh -o BatchMode=yes "${REMOTE_HOST}" 'bash -s' <<'EOF'
@@ -15,8 +19,19 @@ set -euo pipefail
 
 sudo -n true
 
+service_exists() {
+    local svc="$1"
+    systemctl list-unit-files "${svc}.service" --no-legend 2>/dev/null | grep -q "^${svc}\.service"
+}
+
 fast_restart() {
     local svc="$1"
+
+    if ! service_exists "${svc}"; then
+        echo "--> skipping ${svc} (service does not exist)"
+        return 0
+    fi
+
     echo "--> restarting ${svc}"
 
     if systemctl is-active --quiet "${svc}"; then
@@ -30,6 +45,9 @@ fast_restart() {
         sudo -n systemctl kill -s SIGKILL "${svc}" || true
         sleep 2
     fi
+
+    echo "    resetting failed state for ${svc}"
+    sudo -n systemctl reset-failed "${svc}" || true
 
     echo "    starting ${svc}"
     sudo -n systemctl start "${svc}"
@@ -45,9 +63,17 @@ fast_restart() {
 }
 
 fast_restart media-index-celery-worker
-fast_restart media-index-celery-worker-preview
+fast_restart media-index-celery-worker-ops
+fast_restart media-index-celery-worker-control
+fast_restart media-index-celery-worker-document-sync
 fast_restart media-index-celery-worker-embedding
+fast_restart media-index-celery-worker-mail
+fast_restart media-index-celery-worker-metadata
+fast_restart media-index-celery-worker-ocr
+fast_restart media-index-celery-worker-ocr-dispatch
+fast_restart media-index-celery-worker-preview
 fast_restart media-index-celery-worker-scan
+fast_restart media-index-celery-worker-text
 
 echo "==> Remote worker restart complete"
 EOF

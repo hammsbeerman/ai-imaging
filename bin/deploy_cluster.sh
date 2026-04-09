@@ -23,18 +23,8 @@ SSH_OPTS=(
 
 # Format per line:
 #   name|host|remote_deploy_script|role
-#
-# role is optional for now, but this makes the script future-proof.
-# Example roles you may later use:
-#   web
-#   preview
-#   embedding
-#   worker
-#   all
 NODES=(
-  "worker-1|192.168.0.66|/opt/media-index-prod/media_index/bin/deploy.sh|all"
-  # "worker-2|192.168.0.67|/opt/media-index-prod/deploy.sh|preview"
-  # "worker-3|192.168.0.68|/opt/media-index-prod/deploy.sh|embedding"
+  "worker-1|192.168.0.66|/opt/media-index-prod/media_index/bin/deploy.sh|worker"
 )
 
 SUCCESSES=()
@@ -60,7 +50,7 @@ run_local() {
   log_block "Running local deploy on $(hostname)"
 
   if [[ ! -f "$LOCAL_DEPLOY_SCRIPT" ]]; then
-    echo "ERROR: local deploy script not found or not executable: $LOCAL_DEPLOY_SCRIPT"
+    echo "ERROR: local deploy script not found: $LOCAL_DEPLOY_SCRIPT"
     exit 1
   fi
 
@@ -73,7 +63,7 @@ run_remote_node() {
   local name="$1"
   local host="$2"
   local remote_script="$3"
-  local role="${4:-all}"
+  local role="${4:-worker}"
 
   log_block "Running remote deploy on ${name} (${host}) role=${role}"
 
