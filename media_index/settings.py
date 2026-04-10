@@ -297,6 +297,27 @@ CELERY_TASK_ROUTES = {
     "indexer.tasks_duplicate_groups.refresh_duplicate_groups_task": {"queue": "metadata"},
 }
 
+CELERY_TASK_ROUTES.update({
+
+    # TEXT PIPELINE
+    "indexer.tasks_text.queue_missing_text_task": {"queue": "ocr_dispatch"},
+    "indexer.tasks_text.process_text_batch_task": {"queue": "text"},
+    "indexer.tasks_text.extract_text_task": {"queue": "text"},
+
+    # DOCUMENT SYNC
+    "indexer.tasks_documents.sync_document_from_image_task": {"queue": "document_sync"},
+
+    # RECOVERY
+    "indexer.reset_stale_text_task": {"queue": "ops"},
+    "indexer.reset_stale_pipeline_processing_task": {"queue": "ops"},
+    "indexer.tasks_maintenance.reset_stuck_processing_task": {"queue": "ops"},
+
+    # PREVIEW REPAIR (old + new names)
+    "indexer.tasks_preview.repair_missing_previews_task": {"queue": "preview"},
+    "indexer.tasks_preview_repair.repair_missing_previews_task": {"queue": "preview"},
+
+})
+
 CELERY_TASK_ANNOTATIONS = {
     "indexer.tasks_preview.process_preview_task": {
         "soft_time_limit": 300,

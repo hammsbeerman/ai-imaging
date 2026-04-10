@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_PREVIEW_STALE_MINUTES = 45
 DEFAULT_METADATA_STALE_MINUTES = 45
 DEFAULT_EMBEDDING_STALE_MINUTES = 120
+DEFAULT_TEXT_STALE_MINUTES = 45
 DEFAULT_BATCH_SIZE = 500
 
 
@@ -187,9 +188,22 @@ def reset_stale_embedding_task(stale_minutes=DEFAULT_EMBEDDING_STALE_MINUTES, ba
     )
 
 
+@shared_task(name="indexer.reset_stale_text_task")
+def reset_stale_text_task(stale_minutes=DEFAULT_TEXT_STALE_MINUTES, batch_size=DEFAULT_BATCH_SIZE):
+    return _reset_stale_stage(
+        stage_label="text",
+        status_field="text_status",
+        processing_value=ProcessingStatus.PROCESSING,
+        pending_value=ProcessingStatus.PENDING,
+        stale_minutes=stale_minutes,
+        batch_size=batch_size,
+    )
+
+
 @shared_task(name="indexer.reset_stale_pipeline_processing_task")
 def reset_stale_pipeline_processing_task(
     preview_minutes=DEFAULT_PREVIEW_STALE_MINUTES,
+    text_minutes=DEFAULT_TEXT_STALE_MINUTES,
     metadata_minutes=DEFAULT_METADATA_STALE_MINUTES,
     embedding_minutes=DEFAULT_EMBEDDING_STALE_MINUTES,
     batch_size=DEFAULT_BATCH_SIZE,
@@ -200,6 +214,10 @@ def reset_stale_pipeline_processing_task(
     """
     preview_reset = reset_stale_preview_task(
         stale_minutes=preview_minutes,
+        batch_size=batch_size,
+    )
+    text_reset = reset_stale_text_task(
+        stale_minutes=text_minutes,
         batch_size=batch_size,
     )
     metadata_reset = reset_stale_metadata_task(
@@ -213,10 +231,17 @@ def reset_stale_pipeline_processing_task(
 
     result = {
         "preview_reset": int(preview_reset or 0),
+        "text_reset": int(text_reset or 0),
         "metadata_reset": int(metadata_reset or 0),
         "embedding_reset": int(embedding_reset or 0),
-        "total_reset": int((preview_reset or 0) + (metadata_reset or 0) + (embedding_reset or 0)),
+        "total_reset": int(
+            (preview_reset or 0)
+            + (text_reset or 0)
+            + (metadata_reset or 0)
+            + (embedding_reset or 0)
+        ),
         "preview_minutes": preview_minutes,
+        "text_minutes": text_minutes,
         "metadata_minutes": metadata_minutes,
         "embedding_minutes": embedding_minutes,
         "batch_size": batch_size,

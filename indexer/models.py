@@ -498,6 +498,10 @@ class QueueHealthSnapshot(models.Model):
     metadata_queue_depth = models.BigIntegerField(default=0)
     text_queue_depth = models.BigIntegerField(default=0)
 
+    ocr_dispatch_queue_depth = models.IntegerField(default=0)
+    document_sync_queue_depth = models.IntegerField(default=0)
+    celery_queue_depth = models.IntegerField(default=0)
+
     queue_snapshot_error = models.TextField(blank=True, default="")
 
     updated_at = models.DateTimeField(auto_now=True)

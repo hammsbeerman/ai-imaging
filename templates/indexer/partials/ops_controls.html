@@ -30,9 +30,10 @@
         <div class="small text-muted fw-semibold mb-2">Stage Recovery</div>
         <div class="d-flex flex-wrap gap-2">
           {% include "indexer/partials/ops_form_button.html" with action="reset_stale_preview" target="preview" btn_class="btn-warning" label="Reset Preview Stuck" confirm_text="Reset stale preview rows back to pending?" %}
+          {% include "indexer/partials/ops_form_button.html" with action="reset_stale_text" target="text" btn_class="btn-warning" label="Reset Text Stuck" confirm_text="Reset stale text rows back to pending?" %}
           {% include "indexer/partials/ops_form_button.html" with action="reset_stale_metadata" target="metadata" btn_class="btn-warning" label="Reset Metadata Stuck" confirm_text="Reset stale metadata rows back to pending?" %}
           {% include "indexer/partials/ops_form_button.html" with action="reset_stale_embedding" target="embedding" btn_class="btn-warning" label="Reset Embedding Stuck" confirm_text="Reset stale embedding rows back to pending?" %}
-          {% include "indexer/partials/ops_form_button.html" with action="reset_stale_all" target="pipeline" btn_class="btn-danger" label="Reset All Stale" confirm_text="Reset all stale preview, metadata, and embedding rows back to pending?" %}
+          {% include "indexer/partials/ops_form_button.html" with action="reset_stale_all" target="pipeline" btn_class="btn-danger" label="Reset All Stale" confirm_text="Reset all stale preview, text, metadata, and embedding rows back to pending?" %}
         </div>
       </div>
     </div>
@@ -42,10 +43,10 @@
         <div class="small text-muted fw-semibold mb-2">Manual Queueing</div>
         <div class="d-flex flex-wrap gap-2 mb-3">
           {% include "indexer/partials/ops_form_button.html" with action="queue_preview_work" target="preview" btn_class="btn-outline-primary" label="Queue Preview Work" %}
-          {% include "indexer/partials/ops_form_button.html" with action="queue_text_work" target="text" btn_class="btn-outline-primary" label="Queue Text Work" %}
+          {% include "indexer/partials/ops_form_button.html" with action="queue_text_work" target="text" btn_class="btn-outline-primary" label="Queue Text Extraction" %}
           {% include "indexer/partials/ops_form_button.html" with action="queue_metadata_work" target="metadata" btn_class="btn-outline-primary" label="Queue Metadata Work" %}
           {% include "indexer/partials/ops_form_button.html" with action="queue_embedding_work" target="embedding" btn_class="btn-outline-primary" label="Queue Embedding Work" %}
-          {% include "indexer/partials/ops_form_button.html" with action="queue_document_sync" target="ocr" btn_class="btn-outline-primary" label="Queue Document Sync" %}
+          {% include "indexer/partials/ops_form_button.html" with action="queue_document_sync" target="document_sync" btn_class="btn-outline-primary" label="Queue Document Sync" %}
         </div>
 
         <div class="small text-muted">
@@ -76,12 +77,14 @@
           <div class="fw-semibold">Text extraction</div>
           <div class="small text-muted">
             Queue {{ queue_summary.text|default:0 }} ·
-            OCR/document {{ queue_summary.ocr|default:0 }} ·
+            OCR dispatch {{ queue_summary.ocr_dispatch|default:0 }} ·
+            Legacy ocr {{ queue_summary.ocr|default:0 }} ·
+            Legacy celery {{ queue_summary.celery|default:0 }} ·
             Stuck {{ stuck_processing.text|default:0 }} ·
             Processing {{ queue_snapshot.text_processing|default:0 }}
           </div>
-          {% if queue_summary.text|default:0 == 0 and queue_summary.ocr|default:0 > 0 %}
-            <div class="small text-warning mt-1">OCR/document support is backed up while extraction is quiet. Queue text work and confirm OCR + text workers are both active.</div>
+          {% if queue_summary.text|default:0 == 0 and queue_summary.ocr_dispatch|default:0 > 0 %}
+            <div class="small text-warning mt-1">OCR dispatch is backed up while extraction is quiet. Queue text work and confirm OCR dispatch + text workers are both active.</div>
           {% elif stuck_processing.text|default:0 > 0 %}
             <div class="small text-warning mt-1">Text rows are sitting in processing. Check text worker logs and confirm process_text_batch_task is landing on the text queue.</div>
           {% else %}
@@ -155,11 +158,13 @@
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="scan" btn_class="btn-outline-primary" label="Restart Scan" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="preview" btn_class="btn-outline-primary" label="Restart Preview" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="text" btn_class="btn-outline-primary" label="Restart Text" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="ocr_dispatch" btn_class="btn-outline-primary" label="Restart OCR Dispatch" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="document_sync" btn_class="btn-outline-primary" label="Restart Document Sync" %}
         </div>
         <div class="d-flex flex-wrap gap-2">
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="metadata" btn_class="btn-outline-secondary" label="Restart Metadata" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="embedding" btn_class="btn-outline-secondary" label="Restart Embedding" %}
-          {% include "indexer/partials/ops_form_button.html" with action="restart" target="ocr" btn_class="btn-outline-secondary" label="Restart OCR" %}
+          {% include "indexer/partials/ops_form_button.html" with action="restart" target="ocr" btn_class="btn-outline-secondary" label="Restart Legacy OCR" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="mail" btn_class="btn-outline-secondary" label="Restart Mail" %}
           {% include "indexer/partials/ops_form_button.html" with action="restart" target="control" btn_class="btn-outline-secondary" label="Restart Control" %}
         </div>
@@ -230,10 +235,34 @@
 
             <div class="mb-3">
               <div class="d-flex align-items-center justify-content-between mb-2">
-                <div class="fw-semibold">OCR Queue</div>
+                <div class="fw-semibold">OCR Dispatch Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ocr_dispatch_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="ocr_dispatch" btn_class="btn-outline-danger" label="Purge OCR Dispatch Queue" %}
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Document Sync Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.document_sync_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="document_sync" btn_class="btn-outline-danger" label="Purge Document Sync Queue" %}
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Legacy Celery Queue</div>
+                {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.celery_queue_depth|default:0 %}
+              </div>
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="celery" btn_class="btn-outline-danger" label="Purge Legacy Celery Queue" %}
+            </div>
+
+            <div class="mb-3">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="fw-semibold">Legacy OCR Queue</div>
                 {% include "indexer/partials/ops_queue_badge.html" with count=queue_snapshot.ocr_queue_depth|default:0 %}
               </div>
-              {% include "indexer/partials/ops_form_button.html" with action="purge" target="ocr" btn_class="btn-outline-danger" label="Purge OCR Queue" confirm_text="Purge all queued OCR jobs? This does not stop active jobs." %}
+              {% include "indexer/partials/ops_form_button.html" with action="purge" target="ocr" btn_class="btn-outline-danger" label="Purge Legacy OCR Queue" confirm_text="Purge all queued OCR jobs? This does not stop active jobs." %}
             </div>
 
             <div class="mb-3">

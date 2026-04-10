@@ -23,6 +23,7 @@ from .tasks_recovery import (
     reset_stale_metadata_task,
     reset_stale_pipeline_processing_task,
     reset_stale_preview_task,
+    reset_stale_text_task,
 )
 from .tasks_stats import rebuild_archive_stats_task
 from .tasks_text import queue_missing_text_task
@@ -55,6 +56,10 @@ DIRECT_TASK_ACTIONS = {
     "reset_stale_preview": {
         "label": "Reset stale preview rows",
         "runner": lambda: reset_stale_preview_task.delay(),
+    },
+    "reset_stale_text": {
+        "label": "Reset stale text rows",
+        "runner": lambda: reset_stale_text_task.delay(),
     },
     "reset_stale_metadata": {
         "label": "Reset stale metadata rows",
@@ -131,7 +136,7 @@ def run_dashboard_ops_action(request: HttpRequest):
             messages.success(
                 request,
                 f"{direct_spec['label']} queued."
-                + (f" Task id: {async_result.id}" if getattr(async_result, 'id', None) else ""),
+                + (f" Task id: {async_result.id}" if getattr(async_result, "id", None) else ""),
             )
         except Exception as exc:
             logger.exception("Direct task action failed before completion")

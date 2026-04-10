@@ -82,7 +82,6 @@ from indexer.services.search_service import (
 )
 from indexer.models_documents import Document
 
-from .ops_actions import collect_ops_status
 
 
 def _allowed_root_ids(user) -> set[int]:
@@ -402,10 +401,14 @@ def _build_task_runtime_rows():
         "rebuild_folder_health_snapshot_task",
         "queue_missing_previews_task",
         "queue_missing_text_task",
+        "queue_missing_document_sync_task",
         "queue_missing_embeddings_task",
         "queue_missing_metadata_task",
-        "reset_stale_processing_task",
-        "reset_stale_preview_processing_task",
+        "reset_stale_pipeline_processing_task",
+        "reset_stale_preview_task",
+        "reset_stale_text_task",
+        "reset_stale_metadata_task",
+        "reset_stale_embedding_task",
     ]
     recent_metrics = get_recent_task_metrics(metric_task_names, limit=24)
 
@@ -418,11 +421,15 @@ def _build_task_runtime_rows():
         "rebuild_queue_health_snapshot_task": "Queue snapshot rebuild",
         "rebuild_folder_health_snapshot_task": "Folder health rebuild",
         "queue_missing_previews_task": "Preview queue batch",
-        "queue_missing_text_task": "Text queue batch",
+        "queue_missing_text_task": "Text dispatch batch",
+        "queue_missing_document_sync_task": "Document sync queue batch",
         "queue_missing_embeddings_task": "Embedding queue batch",
         "queue_missing_metadata_task": "Metadata queue batch",
-        "reset_stale_processing_task": "Recovery reset",
-        "reset_stale_preview_processing_task": "Preview stale reset",
+        "reset_stale_pipeline_processing_task": "Pipeline stale reset",
+        "reset_stale_preview_task": "Preview stale reset",
+        "reset_stale_text_task": "Text stale reset",
+        "reset_stale_metadata_task": "Metadata stale reset",
+        "reset_stale_embedding_task": "Embedding stale reset",
     }
 
     recent_success_counts = _recent_metric_counts(list(runtime_labels.keys()), minutes=15)
@@ -555,7 +562,8 @@ def _build_dashboard_alerts(
     *,
     system_signals,
     pipeline_health,
-    ocr_queue_depth=0,
+    ocr_dispatch_queue_depth=0,
+    legacy_queue_depth=0,
     queue_summary=None,
     stuck_processing=None,
 ):
@@ -602,12 +610,21 @@ def _build_dashboard_alerts(
             }
         )
 
-    if ocr_queue_depth > 1000 and (queue_summary or {}).get("text", 0) == 0:
+    if ocr_dispatch_queue_depth > 1000 and (queue_summary or {}).get("text", 0) == 0:
         alerts.append(
             {
                 "level": "warning",
-                "title": "OCR backlog is disconnected from text queue reporting",
-                "body": f"OCR queue has {ocr_queue_depth} items while text queue shows 0.",
+                "title": "OCR dispatch backlog is disconnected from text worker backlog",
+                "body": f"OCR dispatch queue has {ocr_dispatch_queue_depth} items while text queue shows 0.",
+            }
+        )
+
+    if legacy_queue_depth > 0:
+        alerts.append(
+            {
+                "level": "warning",
+                "title": "Legacy celery backlog still exists",
+                "body": f"Legacy celery queue still has {legacy_queue_depth} items.",
             }
         )
 
@@ -780,13 +797,14 @@ def ui_home(request):
         "text": _safe_snapshot_value(queue_snapshot, "text_queue_depth", 0),
         "metadata": _safe_snapshot_value(queue_snapshot, "metadata_queue_depth", 0),
         "embedding": _safe_snapshot_value(queue_snapshot, "embedding_queue_depth", 0),
+        "ocr_dispatch": _safe_snapshot_value(queue_snapshot, "ocr_dispatch_queue_depth", 0),
+        "document_sync": _safe_snapshot_value(queue_snapshot, "document_sync_queue_depth", 0),
+        "celery": _safe_snapshot_value(queue_snapshot, "celery_queue_depth", 0),
         "ocr": _safe_snapshot_value(queue_snapshot, "ocr_queue_depth", 0),
         "ops": _safe_snapshot_value(queue_snapshot, "ops_queue_depth", 0),
         "mail": _safe_snapshot_value(queue_snapshot, "mail_queue_depth", 0),
         "control": _safe_snapshot_value(queue_snapshot, "control_queue_depth", 0),
     }
-
-    queue_summary["text_total"] = queue_summary["text"] + queue_summary["ocr"]
 
     scan_queue = {
         "pending_dirs": _safe_snapshot_value(queue_snapshot, "scan_pending_dirs", 0),
@@ -800,6 +818,9 @@ def ui_home(request):
     metadata_queue = _queue_info(queue_snapshot, "metadata")
     embedding_queue = _queue_info(queue_snapshot, "embedding")
 
+    ocr_dispatch_queue = _support_queue_info(queue_snapshot, "ocr_dispatch")
+    document_sync_queue = _support_queue_info(queue_snapshot, "document_sync")
+    legacy_celery_queue = _support_queue_info(queue_snapshot, "celery")
     ocr_queue = _support_queue_info(queue_snapshot, "ocr")
     ops_queue = _support_queue_info(queue_snapshot, "ops")
     mail_queue = _support_queue_info(queue_snapshot, "mail")
@@ -807,13 +828,14 @@ def ui_home(request):
 
     text_backlog = {
         "text_queue_depth": queue_summary["text"],
-        "ocr_queue_depth": queue_summary["ocr"],
-        "combined_queue_depth": queue_summary["text_total"],
+        "ocr_dispatch_queue_depth": queue_summary["ocr_dispatch"],
+        "legacy_ocr_queue_depth": queue_summary["ocr"],
+        "legacy_celery_queue_depth": queue_summary["celery"],
         "text_processing": text_counts["processing"],
         "text_pending_ready": text_counts["pending_ready"],
         "text_failed": text_counts["failed"],
         "text_skipped": text_counts["skipped"],
-        "note": "Combined text backlog includes both the primary text queue and OCR queue.",
+        "note": "Text extraction now uses text + OCR dispatch queues. Legacy ocr/celery values are shown separately during backlog drain.",
     }
 
     stuck_processing = {
@@ -841,10 +863,10 @@ def ui_home(request):
             stage_slug="text",
             queue_info={
                 **text_queue,
-                "queue_depth": queue_summary["text_total"],
-                "primary_queue_depth": queue_summary["text"],
-                "ocr_queue_depth": queue_summary["ocr"],
-                "combined_queue_depth": queue_summary["text_total"],
+                "queue_depth": queue_summary["text"],
+                "ocr_dispatch_queue_depth": queue_summary["ocr_dispatch"],
+                "legacy_ocr_queue_depth": queue_summary["ocr"],
+                "legacy_celery_queue_depth": queue_summary["celery"],
             },
             runtime_row=runtime_map.get("queue_missing_text_task"),
             stuck_count=stuck_processing["text"],
@@ -921,7 +943,8 @@ def ui_home(request):
     alerts = _build_dashboard_alerts(
         system_signals=system_signals,
         pipeline_health=pipeline_health,
-        ocr_queue_depth=queue_summary["ocr"],
+        ocr_dispatch_queue_depth=queue_summary["ocr_dispatch"],
+        legacy_queue_depth=queue_summary["celery"],
         queue_summary=queue_summary,
         stuck_processing=stuck_processing,
     )
@@ -944,6 +967,9 @@ def ui_home(request):
         "text_queue": text_queue,
         "metadata_queue": metadata_queue,
         "embedding_queue": embedding_queue,
+        "ocr_dispatch_queue": ocr_dispatch_queue,
+        "document_sync_queue": document_sync_queue,
+        "legacy_celery_queue": legacy_celery_queue,
         "ocr_queue": ocr_queue,
         "ops_queue": ops_queue,
         "mail_queue": mail_queue,
@@ -1320,7 +1346,7 @@ def ui_similar(request, image_id):
 @login_required
 def ui_retry_preview(request, image_id):
     img = get_object_or_404(Image, id=image_id)
-    img.preview_status = "pending"
+    img.preview_status = PreviewStatus.PENDING
     img.preview_error = ""
     img.save(update_fields=["preview_status", "preview_error"])
     process_preview_task.delay(str(img.id), force=True)
@@ -1330,7 +1356,7 @@ def ui_retry_preview(request, image_id):
 @login_required
 def ui_retry_index(request, image_id):
     img = get_object_or_404(Image, id=image_id)
-    img.embedding_status = "pending"
+    img.embedding_status = ProcessingStatus.PENDING
     img.embedding_error = ""
     img.save(update_fields=["embedding_status", "embedding_error"])
     embed_image_task.delay(str(img.id))
@@ -2101,25 +2127,33 @@ def ui_requeue_stage_bulk(request, stage):
     qs = Image.objects.all()
 
     if stage == "preview":
-        updated = qs.exclude(preview_status=PreviewStatus.PENDING).update(
+        updated = qs.exclude(
+            preview_status__in=[PreviewStatus.PENDING, PreviewStatus.PROCESSING]
+        ).update(
             preview_status=PreviewStatus.PENDING,
             preview_error="",
         )
         messages.success(request, f"Requeued preview for {updated} items.")
     elif stage == "text":
-        updated = qs.exclude(text_status=ProcessingStatus.PENDING).update(
+        updated = qs.exclude(
+            text_status__in=[ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]
+        ).update(
             text_status=ProcessingStatus.PENDING,
             text_error="",
         )
         messages.success(request, f"Requeued text extraction for {updated} items.")
     elif stage == "metadata":
-        updated = qs.exclude(metadata_status=ProcessingStatus.PENDING).update(
+        updated = qs.exclude(
+            metadata_status__in=[ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]
+        ).update(
             metadata_status=ProcessingStatus.PENDING,
             metadata_error="",
         )
         messages.success(request, f"Requeued metadata for {updated} items.")
     elif stage == "embedding":
-        updated = qs.exclude(embedding_status=ProcessingStatus.PENDING).update(
+        updated = qs.exclude(
+            embedding_status__in=[ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]
+        ).update(
             embedding_status=ProcessingStatus.PENDING,
             embedding_error="",
         )

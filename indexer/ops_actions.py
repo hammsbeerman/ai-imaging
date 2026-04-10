@@ -25,6 +25,8 @@ SYSTEMD_SERVICES: Dict[str, str] = {
     "mail": "media-index-celery-worker-mail",
     "metadata": "media-index-celery-worker-metadata",
     "ocr": "media-index-celery-worker-ocr",
+    "ocr_dispatch": "media-index-celery-worker-ocr-dispatch",
+    "document_sync": "media-index-celery-worker-document-sync",
     "scan": "media-index-celery-worker-scan",
     "control": "media-index-celery-worker-control",
 }
@@ -39,6 +41,9 @@ CELERY_QUEUES: Dict[str, str] = {
     "embedding": "embedding",
     "metadata": "metadata",
     "text": "text",
+    "ocr_dispatch": "ocr_dispatch",
+    "document_sync": "document_sync",
+    "celery": "celery",
 }
 
 
