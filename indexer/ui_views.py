@@ -1471,10 +1471,18 @@ def ui_requeue_stage(request, stage):
 
 @login_required
 def ui_browse_root(request):
-    folders = (
-        Folder.objects.select_related("preview_image")
+    page_size = 60
+
+    folder_qs = (
+        Folder.objects
+        .filter(depth=1)
+        .select_related("preview_image")
         .order_by("path")
     )
+
+    paginator = Paginator(folder_qs, page_size)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
 
     rebuild_status = cache.get(
         REBUILD_FOLDER_INDEX_STATUS_KEY,
@@ -1486,14 +1494,13 @@ def ui_browse_root(request):
         },
     )
 
-    return render(
-        request,
-        "indexer/ui_browse_root.html",
-        {
-            "folders": folders,
-            "rebuild_status": rebuild_status,
-        },
-    )
+    context = {
+        "folders": page_obj.object_list,
+        "page_obj": page_obj,
+        "folder_count": paginator.count,
+        "rebuild_status": rebuild_status,
+    }
+    return render(request, "indexer/ui_browse_root.html", context)
 
 
 @login_required
