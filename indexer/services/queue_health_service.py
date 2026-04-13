@@ -154,7 +154,14 @@ def get_top_pipeline_errors(limit=10):
 
 
 def get_recent_task_metrics(task_names: list[str], limit: int = 20):
-    return list(
-        TaskRunMetric.objects.filter(task_name__in=task_names)
-        .order_by("-finished_at")[:limit]
-    )
+    rows = []
+    for task_name in task_names:
+        metric = (
+            TaskRunMetric.objects
+            .filter(task_name=task_name)
+            .order_by("-finished_at")
+            .first()
+        )
+        if metric:
+            rows.append(metric)
+    return rows
