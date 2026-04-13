@@ -12,9 +12,9 @@ from indexer.tasklog import log
 from indexer.tasks_metrics import record_task_metric
 
 
-QUEUE_PICK_LIMIT = 128
-WORKER_BATCH_SIZE = 16
-PREVIEW_PROCESSING_CAP = 2000
+QUEUE_PICK_LIMIT = 256
+WORKER_BATCH_SIZE = 32
+PREVIEW_PROCESSING_CAP = 3000
 
 PREVIEWABLE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff",
