@@ -82,6 +82,7 @@ from indexer.services.search_service import (
 )
 from indexer.models_documents import Document
 
+from .tasks_ops import rebuild_folder_index_task, REBUILD_FOLDER_INDEX_STATUS_KEY
 
 
 def _allowed_root_ids(user) -> set[int]:
@@ -1270,6 +1271,11 @@ def ui_status(request):
     pending_images = Image.objects.filter(indexed=False, skip_index=False).count()
     skipped_images = Image.objects.filter(skip_index=True).count()
 
+    search_ready = Image.objects.filter(
+        indexed=True,
+        skip_index=False
+    ).count()
+
     preview_ready_qs = Image.objects.filter(
         models.Q(preview_status=PreviewStatus.OK) |
         models.Q(preview_path__isnull=False, preview_path__gt="") |
@@ -1315,6 +1321,7 @@ def ui_status(request):
         "indexed_images": indexed_images,
         "pending_images": pending_images,
         "skipped_images": skipped_images,
+        "search_ready": search_ready,
         "preview_ready": preview_ready,
         "pending_previews": pending_previews,
         "failed_previews": failed_previews,
@@ -1464,12 +1471,19 @@ def ui_requeue_stage(request, stage):
 
 @login_required
 def ui_browse_root(request):
-    allowed_root_ids = _allowed_root_ids(request.user)
-
     folders = (
-        Folder.objects.filter(root_id__in=allowed_root_ids, parent__isnull=True)
-        .select_related("preview_image", "root")
-        .order_by("name")
+        Folder.objects.select_related("preview_image")
+        .order_by("path")
+    )
+
+    rebuild_status = cache.get(
+        REBUILD_FOLDER_INDEX_STATUS_KEY,
+        {
+            "state": "idle",
+            "started_at": None,
+            "finished_at": None,
+            "message": "",
+        },
     )
 
     return render(
@@ -1477,6 +1491,7 @@ def ui_browse_root(request):
         "indexer/ui_browse_root.html",
         {
             "folders": folders,
+            "rebuild_status": rebuild_status,
         },
     )
 
@@ -2401,3 +2416,40 @@ def ui_pipeline_stage(request, stage):
             "show_failed_panel": config.get("show_failed_panel", True),
         },
     )
+
+@login_required
+@require_POST
+def ui_rebuild_folder_index(request, folder_id: int):
+    folder = get_object_or_404(Folder, id=folder_id)
+
+    updated = (
+        Image.objects
+        .filter(folder=folder)
+        .update(
+            indexed=False,
+            preview_status="pending",
+            text_status="pending",
+            metadata_status="pending",
+            embedding_status="pending",
+        )
+    )
+
+    messages.success(
+        request,
+        f"Requeued {updated} items in folder: {folder.path}"
+    )
+
+    return redirect("ui_browse_folder", folder_id=folder.id)
+
+@login_required
+@require_POST
+def ui_rebuild_folder_index_full(request):
+    rebuild_status = cache.get(REBUILD_FOLDER_INDEX_STATUS_KEY, {})
+
+    if rebuild_status.get("state") == "running":
+        messages.warning(request, "Folder index rebuild is already running.")
+        return redirect("ui_browse_root")
+
+    rebuild_folder_index_task.delay()
+    messages.success(request, "Folder index rebuild queued.")
+    return redirect("ui_browse_root")

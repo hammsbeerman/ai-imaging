@@ -259,6 +259,7 @@ CELERY_TASK_ROUTES = {
     "indexer.tasks_stats.rebuild_archive_stats_task": {"queue": "ops"},
     "indexer.tasks_queue_health.rebuild_queue_health_snapshot_task": {"queue": "ops"},
     "indexer.tasks_folder_health.rebuild_folder_health_snapshot_task": {"queue": "ops"},
+    "indexer.tasks_ops.rebuild_folder_index_task": {"queue": "ops"},
 
     # text orchestration
     "indexer.tasks_text.queue_missing_text_task": {"queue": "ocr_dispatch"},
