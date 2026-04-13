@@ -239,14 +239,15 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 300.0,
         "options": {"queue": "mail", "routing_key": "mail"},
     },
-    "reset-stale-pipeline-processing-every-10-minutes": {
+    "reset-stale-pipeline-processing-every-5-minutes": {
         "task": "indexer.reset_stale_pipeline_processing_task",
-        "schedule": 600.0,
+        "schedule": 300.0,
         "kwargs": {
-            "preview_minutes": 45,
-            "metadata_minutes": 45,
-            "embedding_minutes": 120,
-            "batch_size": 500,
+            "preview_minutes": 15,
+            "text_minutes": 15,
+            "metadata_minutes": 20,
+            "embedding_minutes": 60,
+            "batch_size": 2000,
         },
         "options": {"queue": "control", "routing_key": "control"},
     },
