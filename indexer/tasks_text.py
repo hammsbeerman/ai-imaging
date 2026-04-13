@@ -29,9 +29,9 @@ IMAGE_TEXT_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp"}
 
 # Keep text work moving, but do not let it claim so much work that rows sit in
 # PROCESSING forever while the worker catches up.
-QUEUE_PICK_LIMIT = 200
-WORKER_BATCH_SIZE = 10
-TEXT_PROCESSING_CAP = 200
+QUEUE_PICK_LIMIT = 500
+WORKER_BATCH_SIZE = 25
+TEXT_PROCESSING_CAP = 500
 
 
 def _chunked(seq, size):
