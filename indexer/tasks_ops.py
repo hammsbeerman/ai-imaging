@@ -7,13 +7,17 @@ from django.utils import timezone
 REBUILD_FOLDER_INDEX_STATUS_KEY = "rebuild_folder_index_status"
 
 
+def _now_str():
+    return timezone.localtime().strftime("%Y-%m-%d %I:%M:%S %p")
+
+
 @shared_task
 def rebuild_folder_index_task():
     cache.set(
         REBUILD_FOLDER_INDEX_STATUS_KEY,
         {
             "state": "running",
-            "started_at": timezone.now().isoformat(),
+            "started_at": _now_str(),
             "finished_at": None,
             "message": "Folder index rebuild is running.",
         },
@@ -27,7 +31,7 @@ def rebuild_folder_index_task():
             {
                 "state": "idle",
                 "started_at": None,
-                "finished_at": timezone.localtime().strftime("%Y-%m-%d %I:%M:%S %p"),
+                "finished_at": _now_str(),
                 "message": "Folder index rebuild completed.",
             },
             timeout=60 * 60 * 6,
@@ -38,7 +42,7 @@ def rebuild_folder_index_task():
             {
                 "state": "failed",
                 "started_at": None,
-                "finished_at": timezone.localtime().strftime("%Y-%m-%d %I:%M:%S %p"),
+                "finished_at": _now_str(),
                 "message": f"Folder index rebuild failed: {e}",
             },
             timeout=60 * 60 * 6,

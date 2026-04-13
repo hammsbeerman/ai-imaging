@@ -2444,12 +2444,7 @@ def ui_rebuild_folder_index(request, folder_id: int):
 @login_required
 @require_POST
 def ui_rebuild_folder_index_full(request):
-    rebuild_status = cache.get(REBUILD_FOLDER_INDEX_STATUS_KEY, {})
+    rebuild_folder_index_task.delay()   # ← ONLY THIS
 
-    if rebuild_status.get("state") == "running":
-        messages.warning(request, "Folder index rebuild is already running.")
-        return redirect("ui_browse_root")
-
-    rebuild_folder_index_task.delay()
     messages.success(request, "Folder index rebuild queued.")
     return redirect("ui_browse_root")
